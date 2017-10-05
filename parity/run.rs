@@ -329,7 +329,7 @@ fn execute_light(cmd: RunCmd, can_restart: bool, logger: Arc<RotatingLogger>) ->
 			remote: event_loop.raw_remote(),
 			fetch: fetch.clone(),
 			signer: signer_service.clone(),
-			ui_address: cmd.ui_conf.address(),
+			ui_address: cmd.ui_conf.redirection_address(),
 		})
 	};
 
@@ -724,7 +724,7 @@ pub fn execute(cmd: RunCmd, can_restart: bool, logger: Arc<RotatingLogger>) -> R
 			remote: event_loop.raw_remote(),
 			fetch: fetch.clone(),
 			signer: signer_service.clone(),
-			ui_address: cmd.ui_conf.address(),
+			ui_address: cmd.ui_conf.redirection_address(),
 		})
 	};
 	let dapps_middleware = dapps::new(cmd.dapps_conf.clone(), dapps_deps.clone())?;

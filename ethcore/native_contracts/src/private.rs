@@ -14,16 +14,8 @@
 // You should have received a copy of the GNU General Public License
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
-//! Vm test loader.
+#![allow(unused_mut, unused_variables, unused_imports)]
 
-pub mod env;
-pub mod transaction;
-pub mod vm;
-pub mod call;
-pub mod test;
+//! Private (encrypted) contract.
 
-pub use self::env::Env;
-pub use self::transaction::Transaction;
-pub use self::vm::Vm;
-pub use self::call::Call;
-pub use self::test::Test;
+include!(concat!(env!("OUT_DIR"), "/private.rs"));

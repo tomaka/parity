@@ -45,8 +45,7 @@ impl PrivateTransactions {
 	}
 
 	/// Returns the list of all stored private transactions
-	pub fn transactions_list(&self) -> Vec<PrivateTransaction> {
-		self.transactions.clone()
+	pub fn transactions_list(&self) -> Vec<PrivateTransaction> {		self.transactions.clone()
 	}
 
 	/// Returns the list of all stored signed private transactions

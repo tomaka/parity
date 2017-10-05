@@ -172,6 +172,7 @@ pub mod views;
 mod cache_manager;
 mod blooms;
 mod basic_types;
+mod private_transactions;
 mod pod_account;
 mod state_db;
 mod account_db;
