@@ -47,6 +47,7 @@ extern crate ethcore_light as light;
 
 #[cfg(test)] extern crate ethcore_devtools as devtools;
 #[cfg(test)] extern crate ethkey;
+#[cfg(test)] extern crate rustc_hex;
 
 #[macro_use]
 extern crate log;

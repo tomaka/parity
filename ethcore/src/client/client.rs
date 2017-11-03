@@ -59,7 +59,7 @@ use log_entry::LocalizedLogEntry;
 use miner::{Miner, MinerService, TransactionImportResult};
 use native_contracts::Registry;
 use parking_lot::{Mutex, RwLock, MutexGuard};
-use private_transactions::Provider as PrivateTransactionsProvider;
+use private_transactions::{Provider as PrivateTransactionsProvider, ProviderConfig as PrivateTransactionProviderConfig};
 use rand::OsRng;
 use receipt::{Receipt, LocalizedReceipt};
 use rlp::UntrustedRlp;
@@ -161,7 +161,7 @@ pub struct Client {
 	provider: Arc<PrivateTransactionsProvider>,
 	sleep_state: Mutex<SleepState>,
 	liveness: AtomicBool,
-	io_channel: Mutex<IoChannel<ClientIoMessage>>,
+	io_channel: Arc<Mutex<IoChannel<ClientIoMessage>>>,
 	notify: RwLock<Vec<Weak<ChainNotify>>>,
 	queue_transactions: AtomicUsize,
 	last_hashes: RwLock<VecDeque<H256>>,
@@ -231,6 +231,8 @@ impl Client {
 
 		let awake = match config.mode { Mode::Dark(..) | Mode::Off => false, _ => true };
 
+		let provider = Arc::new(PrivateTransactionsProvider::new(PrivateTransactionProviderConfig::default()));
+
 		let client = Arc::new(Client {
 			enabled: AtomicBool::new(true),
 			sleep_state: Mutex::new(SleepState::new(awake)),
@@ -248,8 +250,8 @@ impl Client {
 			report: RwLock::new(Default::default()),
 			import_lock: Mutex::new(()),
 			miner: miner,
-			provider: Arc::new(PrivateTransactionsProvider::new()),
-			io_channel: Mutex::new(message_channel),
+			provider: provider.clone(),
+			io_channel: Arc::new(Mutex::new(message_channel)),
 			notify: RwLock::new(Vec::new()),
 			queue_transactions: AtomicUsize::new(0),
 			last_hashes: RwLock::new(VecDeque::new()),
@@ -261,6 +263,9 @@ impl Client {
 			registrar: Mutex::new(None),
 			exit_handler: Mutex::new(None),
 		});
+
+		// register inside private transactions provider
+		provider.register_client(Arc::downgrade(&client));
 
 		// prune old states.
 		{
@@ -907,6 +912,11 @@ impl Client {
 		*self.io_channel.lock() = io_channel;
 	}
 
+	/// Get io channel
+	pub fn get_io_channel(&self) -> Arc<Mutex<IoChannel<ClientIoMessage>>> {
+		self.io_channel.clone()
+	}
+
 	/// Attempt to get a copy of a specific block's final state.
 	///
 	/// This will not fail if given BlockId::Latest.
@@ -1218,8 +1228,8 @@ impl BlockChainClient for Client {
 		Ok(results)
 	}
 
-	fn private_transactions_provider(&self) -> &PrivateTransactionsProvider {
-		&*self.provider
+	fn private_transactions_provider(&self) -> Arc<PrivateTransactionsProvider> {
+		self.provider.clone()
 	}
 
 	fn estimate_gas(&self, t: &SignedTransaction, block: BlockId) -> Result<U256, CallError> {
