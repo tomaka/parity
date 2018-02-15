@@ -60,7 +60,11 @@ pub fn open(url: &str) {
 
 #[cfg(target_os="android")]
 pub fn open(_url: &str) {
+<<<<<<< HEAD
 	// TODO: While it is generally always bad to leave a function implemented, there is not much
 	//		 more we can do here. This function will eventually be removed when we compile Parity
 	//		 as a library and not as a full binary.
+=======
+	// TODO: ?
+>>>>>>> Tweaks and add a Dockerfile for Android
 }
