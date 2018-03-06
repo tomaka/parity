@@ -19,9 +19,9 @@ use std::collections::{HashMap, BTreeMap};
 use std::io;
 use std::time::Duration;
 use bytes::Bytes;
-use devp2p::{NetworkService, ConnectionFilter};
 use network::{NetworkProtocolHandler, NetworkContext, HostInfo, PeerId, ProtocolId,
-	NetworkConfiguration as BasicNetworkConfiguration, NonReservedPeerMode, Error, ErrorKind};
+	NetworkConfiguration as BasicNetworkConfiguration, NonReservedPeerMode, Error, ErrorKind,
+	ConnectionFilter};
 use ethereum_types::{H256, H512, U256};
 use io::{TimerToken};
 use ethcore::ethstore::ethkey::Secret;
@@ -30,17 +30,14 @@ use ethcore::snapshot::SnapshotService;
 use ethcore::header::BlockNumber;
 use sync_io::NetSyncIo;
 use chain::{ChainSync, SyncStatus as EthSyncStatus};
-use std::net::{SocketAddr, AddrParseError};
-use std::str::FromStr;
 use parking_lot::RwLock;
 use chain::{ETH_PACKET_COUNT, SNAPSHOT_SYNC_PACKET_COUNT, ETH_PROTOCOL_VERSION_63, ETH_PROTOCOL_VERSION_62,
 	PAR_PROTOCOL_VERSION_1, PAR_PROTOCOL_VERSION_2, PAR_PROTOCOL_VERSION_3};
 use light::client::AsLightClient;
 use light::Provider;
 use light::net::{self as light_net, LightProtocol, Params as LightParams, Capabilities, Handler as LightHandler, EventContext};
-use network::IpFilter;
 use private_tx::PrivateTxHandler;
-use transaction::UnverifiedTransaction;
+use net_backends_merge::{NetBackend, NetworkConfiguration};
 
 /// Parity sync protocol
 pub const WARP_SYNC_PROTOCOL_ID: ProtocolId = *b"par";
@@ -209,7 +206,7 @@ pub struct AttachedProtocol {
 }
 
 impl AttachedProtocol {
-	fn register(&self, network: &NetworkService) {
+	fn register(&self, network: &NetBackend) {
 		let res = network.register_protocol(
 			self.handler.clone(),
 			self.protocol_id,
@@ -218,7 +215,7 @@ impl AttachedProtocol {
 		);
 
 		if let Err(e) = res {
-			warn!(target: "sync", "Error attaching protocol {:?}: {:?}", self.protocol_id, e);
+			warn!(target: "sync", "Error attaching protocol {:?} to devp2p: {:?}", self.protocol_id, e);
 		}
 	}
 }
@@ -235,16 +232,17 @@ pub struct Params {
 	pub private_tx_handler: Arc<PrivateTxHandler>,
 	/// Light data provider.
 	pub provider: Arc<::light::Provider>,
-	/// Network layer configuration.
-	pub network_config: NetworkConfiguration,
+	/// Network layer configuration for devp2p, or `None` if devp2p should be disabled.
+	pub devp2p_network_config: Option<NetworkConfiguration>,
+	/// Network layer configuration for libp2p, or `None` if libp2p should be disabled.
+	pub libp2p_network_config: Option<NetworkConfiguration>,
 	/// Other protocols to attach.
 	pub attached_protos: Vec<AttachedProtocol>,
 }
 
 /// Ethereum network protocol handler
 pub struct EthSync {
-	/// Network service
-	network: NetworkService,
+	network: NetBackend,
 	/// Main (eth/par) protocol handler
 	eth_handler: Arc<SyncProtocolHandler>,
 	/// Light (pip) protocol handler
@@ -266,7 +264,8 @@ impl EthSync {
 		let light_proto = match params.config.serve_light {
 			false => None,
 			true => Some({
-				let sample_store = params.network_config.net_config_path
+				// TODO: correctly handle devp2p here
+				let sample_store = params.devp2p_network_config.as_ref().unwrap().net_config_path
 					.clone()
 					.map(::std::path::PathBuf::from)
 					.map(|mut p| { p.push("request_timings"); light_net::FileStore(p) })
@@ -284,7 +283,8 @@ impl EthSync {
 					sample_store: sample_store,
 				};
 
-				let max_peers = ::std::cmp::min(params.network_config.max_peers, 1);
+				// TODO: correctly handle devp2p here
+				let max_peers = ::std::cmp::min(params.devp2p_network_config.as_ref().unwrap().max_peers, 1);
 				light_params.config.load_share = MAX_LIGHTSERV_LOAD / max_peers as f64;
 
 				let mut light_proto = LightProtocol::new(params.provider, light_params);
@@ -295,10 +295,12 @@ impl EthSync {
 		};
 
 		let chain_sync = ChainSync::new(params.config, &*params.chain, params.private_tx_handler.clone());
-		let service = NetworkService::new(params.network_config.clone().into_basic()?, connection_filter)?;
+
+		// Enable devp2p and/or libp2p
+		let net_backend = NetBackend::new(params.devp2p_network_config, params.libp2p_network_config, connection_filter)?;
 
 		let sync = Arc::new(EthSync {
-			network: service,
+			network: net_backend,
 			eth_handler: Arc::new(SyncProtocolHandler {
 				sync: RwLock::new(chain_sync),
 				chain: params.chain,
@@ -348,7 +350,9 @@ impl SyncProvider for EthSync {
 	}
 
 	fn enode(&self) -> Option<String> {
-		self.network.external_url()
+		// TODO: do it correctly with devp2p and libp2p
+		//self.network_libp2p.as_ref().unwrap().external_url()
+		Some(String::new())
 	}
 
 	fn transactions_stats(&self) -> BTreeMap<H256, TransactionStats> {
@@ -469,7 +473,9 @@ impl ChainNotify for EthSync {
 		}
 
 		// register any attached protocols.
-		for proto in &self.attached_protos { proto.register(&self.network) }
+		for proto in &self.attached_protos {
+			proto.register(&self.network);
+		}
 	}
 
 	fn stop(&self) {
@@ -569,104 +575,6 @@ impl ManageNetwork for EthSync {
 	}
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// Network service configuration
-pub struct NetworkConfiguration {
-	/// Directory path to store general network configuration. None means nothing will be saved
-	pub config_path: Option<String>,
-	/// Directory path to store network-specific configuration. None means nothing will be saved
-	pub net_config_path: Option<String>,
-	/// IP address to listen for incoming connections. Listen to all connections by default
-	pub listen_address: Option<String>,
-	/// IP address to advertise. Detected automatically if none.
-	pub public_address: Option<String>,
-	/// Port for UDP connections, same as TCP by default
-	pub udp_port: Option<u16>,
-	/// Enable NAT configuration
-	pub nat_enabled: bool,
-	/// Enable discovery
-	pub discovery_enabled: bool,
-	/// List of initial node addresses
-	pub boot_nodes: Vec<String>,
-	/// Use provided node key instead of default
-	pub use_secret: Option<Secret>,
-	/// Max number of connected peers to maintain
-	pub max_peers: u32,
-	/// Min number of connected peers to maintain
-	pub min_peers: u32,
-	/// Max pending peers.
-	pub max_pending_peers: u32,
-	/// Reserved snapshot sync peers.
-	pub snapshot_peers: u32,
-	/// List of reserved node addresses.
-	pub reserved_nodes: Vec<String>,
-	/// The non-reserved peer mode.
-	pub allow_non_reserved: bool,
-	/// IP Filtering
-	pub ip_filter: IpFilter,
-	/// Client version string
-	pub client_version: String,
-}
-
-impl NetworkConfiguration {
-	/// Create a new default config.
-	pub fn new() -> Self {
-		From::from(BasicNetworkConfiguration::new())
-	}
-
-	/// Create a new local config.
-	pub fn new_local() -> Self {
-		From::from(BasicNetworkConfiguration::new_local())
-	}
-
-	/// Attempt to convert this config into a BasicNetworkConfiguration.
-	pub fn into_basic(self) -> Result<BasicNetworkConfiguration, AddrParseError> {
-		Ok(BasicNetworkConfiguration {
-			config_path: self.config_path,
-			net_config_path: self.net_config_path,
-			listen_address: match self.listen_address { None => None, Some(addr) => Some(SocketAddr::from_str(&addr)?) },
-			public_address: match self.public_address { None => None, Some(addr) => Some(SocketAddr::from_str(&addr)?) },
-			udp_port: self.udp_port,
-			nat_enabled: self.nat_enabled,
-			discovery_enabled: self.discovery_enabled,
-			boot_nodes: self.boot_nodes,
-			use_secret: self.use_secret,
-			max_peers: self.max_peers,
-			min_peers: self.min_peers,
-			max_handshakes: self.max_pending_peers,
-			reserved_protocols: hash_map![WARP_SYNC_PROTOCOL_ID => self.snapshot_peers],
-			reserved_nodes: self.reserved_nodes,
-			ip_filter: self.ip_filter,
-			non_reserved_mode: if self.allow_non_reserved { NonReservedPeerMode::Accept } else { NonReservedPeerMode::Deny },
-			client_version: self.client_version,
-		})
-	}
-}
-
-impl From<BasicNetworkConfiguration> for NetworkConfiguration {
-	fn from(other: BasicNetworkConfiguration) -> Self {
-		NetworkConfiguration {
-			config_path: other.config_path,
-			net_config_path: other.net_config_path,
-			listen_address: other.listen_address.and_then(|addr| Some(format!("{}", addr))),
-			public_address: other.public_address.and_then(|addr| Some(format!("{}", addr))),
-			udp_port: other.udp_port,
-			nat_enabled: other.nat_enabled,
-			discovery_enabled: other.discovery_enabled,
-			boot_nodes: other.boot_nodes,
-			use_secret: other.use_secret,
-			max_peers: other.max_peers,
-			min_peers: other.min_peers,
-			max_pending_peers: other.max_handshakes,
-			snapshot_peers: *other.reserved_protocols.get(&WARP_SYNC_PROTOCOL_ID).unwrap_or(&0),
-			reserved_nodes: other.reserved_nodes,
-			ip_filter: other.ip_filter,
-			allow_non_reserved: match other.non_reserved_mode { NonReservedPeerMode::Accept => true, _ => false } ,
-			client_version: other.client_version,
-		}
-	}
-}
-
 /// Configuration for IPC service.
 #[derive(Debug, Clone)]
 pub struct ServiceConfiguration {
@@ -711,8 +619,10 @@ pub trait LightSyncProvider {
 
 /// Configuration for the light sync.
 pub struct LightSyncParams<L> {
-	/// Network configuration.
-	pub network_config: BasicNetworkConfiguration,
+	/// Network configuration for devp2p, or `None` if devp2p is disabled.
+	pub devp2p_network_config: Option<BasicNetworkConfiguration>,
+	/// Network configuration for libp2p, or `None` if libp2p is disabled.
+	pub libp2p_network_config: Option<BasicNetworkConfiguration>,
 	/// Light client to sync to.
 	pub client: Arc<L>,
 	/// Network ID.
@@ -730,7 +640,7 @@ pub struct LightSync {
 	proto: Arc<LightProtocol>,
 	sync: Arc<::light_sync::SyncInfo + Sync + Send>,
 	attached_protos: Vec<AttachedProtocol>,
-	network: NetworkService,
+	network: NetBackend,
 	subprotocol_name: [u8; 3],
 	network_id: u64,
 }
@@ -767,13 +677,14 @@ impl LightSync {
 			(sync_handler, Arc::new(light_proto))
 		};
 
-		let service = NetworkService::new(params.network_config, None)?;
+		// Start devp2p and libp2p
+		let network = NetBackend::new(params.devp2p_network_config.map(Into::into), params.libp2p_network_config.map(Into::into), None)?;
 
 		Ok(LightSync {
 			proto: light_proto,
 			sync: sync,
 			attached_protos: params.attached_protos,
-			network: service,
+			network: network,
 			subprotocol_name: params.subprotocol_name,
 			network_id: params.network_id,
 		})
@@ -798,11 +709,11 @@ impl ::std::ops::Deref for LightSync {
 
 impl ManageNetwork for LightSync {
 	fn accept_unreserved_peers(&self) {
-		self.network.set_non_reserved_mode(NonReservedPeerMode::Accept);
+		self.network.set_non_reserved_mode(NonReservedPeerMode::Accept)
 	}
 
 	fn deny_unreserved_peers(&self) {
-		self.network.set_non_reserved_mode(NonReservedPeerMode::Deny);
+		self.network.set_non_reserved_mode(NonReservedPeerMode::Deny)
 	}
 
 	fn remove_reserved_peer(&self, peer: String) -> Result<(), String> {
@@ -814,6 +725,8 @@ impl ManageNetwork for LightSync {
 	}
 
 	fn start_network(&self) {
+		let light_proto = self.proto.clone();
+
 		match self.network.start().map_err(Into::into) {
 			Err(ErrorKind::Io(ref e)) if e.kind() == io::ErrorKind::AddrInUse => {
 				warn!("Network port {:?} is already in use, make sure that another instance of an Ethereum client is not running or change the port using the --port option.", self.network.config().listen_address.expect("Listen address is not set."))
@@ -822,18 +735,18 @@ impl ManageNetwork for LightSync {
 			_ => {},
 		}
 
-		let light_proto = self.proto.clone();
+		self.network.register_protocol(light_proto.clone(), self.subprotocol_name, ::light::net::PACKET_COUNT, ::light::net::PROTOCOL_VERSIONS)
+			.unwrap_or_else(|e| warn!("Error registering light client protocol to devp2p: {:?}", e));
 
-		self.network.register_protocol(light_proto, self.subprotocol_name, ::light::net::PACKET_COUNT, ::light::net::PROTOCOL_VERSIONS)
-			.unwrap_or_else(|e| warn!("Error registering light client protocol: {:?}", e));
-
-		for proto in &self.attached_protos { proto.register(&self.network) }
+		for proto in &self.attached_protos {
+			proto.register(&self.network);
+		}
 	}
 
 	fn stop_network(&self) {
 		self.proto.abort();
 		if let Err(e) = self.network.stop() {
-			warn!("Error stopping network: {}", e);
+			warn!("Error stopping devp2p network: {}", e);
 		}
 	}
 

@@ -23,6 +23,7 @@
 
 extern crate ethcore_network as network;
 extern crate ethcore_network_devp2p as devp2p;
+extern crate ethcore_network_libp2p as libp2p;
 extern crate ethcore_bytes as bytes;
 extern crate ethcore_io as io;
 extern crate ethcore_transaction as transaction;
@@ -58,6 +59,7 @@ extern crate heapsize;
 mod chain;
 mod blocks;
 mod block_sync;
+mod net_backends_merge;
 mod sync_io;
 mod private_tx;
 mod snapshot;
@@ -72,6 +74,7 @@ mod api;
 
 pub use api::*;
 pub use chain::{SyncStatus, SyncState};
-pub use devp2p::{validate_node_url, ConnectionFilter, ConnectionDirection};
-pub use network::{NonReservedPeerMode, Error, ErrorKind};
+pub use devp2p::validate_node_url;      // TODO: move this to network?
+pub use network::{NonReservedPeerMode, Error, ErrorKind, ConnectionFilter, ConnectionDirection};
+pub use net_backends_merge::NetworkConfiguration;
 pub use private_tx::{PrivateTxHandler, NoopPrivateTxHandler, SimplePrivateTxHandler};

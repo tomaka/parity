@@ -16,7 +16,7 @@
 
 //! Connection filter trait.
 
-use super::NodeId;
+use NodeId;
 
 /// Filtered connection direction.
 pub enum ConnectionDirection {

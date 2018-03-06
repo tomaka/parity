@@ -137,3 +137,7 @@ members = [
 
 [patch.crates-io]
 ring = { git = "https://github.com/paritytech/ring" }
+# TODO: remove once merged upstream
+"multihash" = { git = "https://github.com/tomaka/rust-multihash", branch = "emscripten-hack" }
+# TODO: remove
+"multiaddr" = { git = "https://github.com/multiformats/rust-multiaddr", rev = "cc39c90" }

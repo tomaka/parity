@@ -41,11 +41,11 @@ use network::{NetworkConfiguration, NetworkIoMessage, ProtocolId, PeerId, Packet
 use network::{NonReservedPeerMode, NetworkContext as NetworkContextTrait};
 use network::HostInfo as HostInfoTrait;
 use network::{SessionInfo, Error, ErrorKind, DisconnectReason, NetworkProtocolHandler};
+use network::{ConnectionFilter, ConnectionDirection};
 use discovery::{Discovery, TableUpdates, NodeEntry};
 use ip_utils::{map_external_address, select_public_address};
 use path::restrict_permissions_owner;
 use parking_lot::{Mutex, RwLock};
-use connection_filter::{ConnectionFilter, ConnectionDirection};
 
 type Slab<T> = ::slab::Slab<T, usize>;
 
@@ -148,10 +148,6 @@ impl<'s> NetworkContextTrait for NetworkContext<'s> {
 		self.session_id.map_or_else(|| Err(ErrorKind::Expired.into()), |id| self.send(id, packet_id, data))
 	}
 
-	fn io_channel(&self) -> IoChannel<NetworkIoMessage> {
-		self.io.channel()
-	}
-
 	fn disable_peer(&self, peer: PeerId) {
 		self.io.message(NetworkIoMessage::DisablePeer(peer))
 			.unwrap_or_else(|e| warn!("Error sending network IO message: {:?}", e));
@@ -209,6 +205,13 @@ pub struct HostInfo {
 	pub public_endpoint: Option<NodeEndpoint>,
 }
 
+impl HostInfo {
+	fn next_nonce(&mut self) -> H256 {
+		self.nonce = keccak(&self.nonce);
+		self.nonce
+	}
+}
+
 impl HostInfoTrait for HostInfo {
 	fn id(&self) -> &NodeId {
 		self.keys.public()
@@ -216,11 +219,6 @@ impl HostInfoTrait for HostInfo {
 
 	fn secret(&self) -> &Secret {
 		self.keys.secret()
-	}
-
-	fn next_nonce(&mut self) -> H256 {
-		self.nonce = keccak(&self.nonce);
-		self.nonce
 	}
 
 	fn client_version(&self) -> &str {

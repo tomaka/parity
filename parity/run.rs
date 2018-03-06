@@ -275,7 +275,13 @@ fn execute_light_impl(cmd: RunCmd, logger: Arc<RotatingLogger>) -> Result<Runnin
 	// set network path.
 	net_conf.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());
 	let sync_params = LightSyncParams {
-		network_config: net_conf.into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?,
+		// TODO: do correctly
+		devp2p_network_config: Some(net_conf.clone().into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?),
+		libp2p_network_config: Some(
+			sync::NetworkConfiguration {
+				listen_address: Some("0.0.0.0:10333".to_owned()),
+				..net_conf.clone()
+			}.into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?),
 		client: Arc::new(provider),
 		network_id: cmd.network_id.unwrap_or(spec.network_id()),
 		subprotocol_name: sync::LIGHT_PROTOCOL,
@@ -703,7 +709,13 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// create sync object
 	let (sync_provider, manage_network, chain_notify) = modules::sync(
 		sync_config,
-		net_conf.clone().into(),
+		Some(net_conf.clone().into()),
+		Some(
+			sync::NetworkConfiguration {
+				listen_address: Some("0.0.0.0:10333".to_owned()),
+				boot_nodes: vec!["127.0.0.1:10333".to_owned()],
+				..net_conf.clone()
+			}.into()),
 		client.clone(),
 		snapshot_service.clone(),
 		private_tx_service.clone(),

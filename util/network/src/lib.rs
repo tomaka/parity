@@ -27,9 +27,11 @@ extern crate snappy;
 #[macro_use]
 extern crate error_chain;
 
+mod connection_filter;
 mod error;
 
 pub use io::TimerToken;
+pub use connection_filter::{ConnectionFilter, ConnectionDirection};
 pub use error::{Error, ErrorKind, DisconnectReason};
 
 use std::cmp::Ordering;
@@ -39,7 +41,6 @@ use std::str::{self, FromStr};
 use std::sync::Arc;
 use std::time::Duration;
 use ipnetwork::{IpNetwork, IpNetworkError};
-use io::IoChannel;
 use ethkey::Secret;
 use ethereum_types::{H256, H512};
 use rlp::{Decodable, DecoderError, Rlp};
@@ -56,6 +57,7 @@ pub type NodeId = H512;
 pub type PeerId = usize;
 
 /// Messages used to communitate with the event loop from other threads.
+// TODO: move to devp2p
 #[derive(Clone)]
 pub enum NetworkIoMessage {
 	/// Register a new protocol handler.
@@ -259,9 +261,6 @@ pub trait NetworkContext {
 	/// Respond to a current network message. Panics if no there is no packet in the context. If the session is expired returns nothing.
 	fn respond(&self, packet_id: PacketId, data: Vec<u8>) -> Result<(), Error>;
 
-	/// Get an IoChannel.
-	fn io_channel(&self) -> IoChannel<NetworkIoMessage>;
-
 	/// Disconnect a peer and prevent it from connecting again.
 	fn disable_peer(&self, peer: PeerId);
 
@@ -298,10 +297,6 @@ impl<'a, T> NetworkContext for &'a T where T: ?Sized + NetworkContext {
 
 	fn respond(&self, packet_id: PacketId, data: Vec<u8>) -> Result<(), Error> {
 		(**self).respond(packet_id, data)
-	}
-
-	fn io_channel(&self) -> IoChannel<NetworkIoMessage> {
-		(**self).io_channel()
 	}
 
 	fn disable_peer(&self, peer: PeerId) {
@@ -342,8 +337,6 @@ pub trait HostInfo {
 	fn id(&self) -> &NodeId;
 	/// Returns secret key
 	fn secret(&self) -> &Secret;
-	/// Increments and returns connection nonce.
-	fn next_nonce(&mut self) -> H256;
     /// Returns the client version.
 	fn client_version(&self) -> &str;
 }
@@ -353,6 +346,7 @@ pub trait HostInfo {
 /// `Message` is the type for message data.
 pub trait NetworkProtocolHandler: Sync + Send {
 	/// Initialize the handler
+	// TODO: called twice if we use both devp2p and libp2p
 	fn initialize(&self, _io: &NetworkContext, _host_info: &HostInfo) {}
 	/// Called when new network packet received.
 	fn read(&self, io: &NetworkContext, peer: &PeerId, packet_id: u8, data: &[u8]);

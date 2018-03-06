@@ -29,7 +29,8 @@ pub type SyncModules = (Arc<SyncProvider>, Arc<ManageNetwork>, Arc<ChainNotify>)
 
 pub fn sync(
 	sync_cfg: SyncConfig,
-	net_cfg: NetworkConfiguration,
+	net_cfg_devp2p: Option<NetworkConfiguration>,
+	net_cfg_libp2p: Option<NetworkConfiguration>,
 	client: Arc<BlockChainClient>,
 	snapshot_service: Arc<SnapshotService>,
 	private_tx_handler: Arc<PrivateTxHandler>,
@@ -44,7 +45,8 @@ pub fn sync(
 		provider: provider,
 		snapshot_service: snapshot_service,
 		private_tx_handler,
-		network_config: net_cfg,
+		devp2p_network_config: net_cfg_devp2p,
+		libp2p_network_config: net_cfg_libp2p,
 		attached_protos: attached_protos,
 	},
 	connection_filter)?;

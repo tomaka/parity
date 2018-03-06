@@ -15,13 +15,12 @@
 // along with Parity.  If not, see <http://www.gnu.org/licenses/>.
 
 use network::{Error, NetworkConfiguration, NetworkProtocolHandler, NonReservedPeerMode};
-use network::{NetworkContext, PeerId, ProtocolId, NetworkIoMessage};
+use network::{NetworkContext, PeerId, ProtocolId, NetworkIoMessage, ConnectionFilter};
 use host::Host;
 use io::*;
 use parking_lot::RwLock;
 use std::sync::Arc;
 use ansi_term::Colour;
-use connection_filter::ConnectionFilter;
 
 struct HostHandler {
 	public_url: RwLock<Option<String>>
@@ -66,7 +65,7 @@ impl NetworkService {
 		})
 	}
 
-	/// Regiter a new protocol handler with the event loop.
+	/// Register a new protocol handler with the event loop.
 	pub fn register_protocol(&self, handler: Arc<NetworkProtocolHandler + Send + Sync>, protocol: ProtocolId, packet_count: u8, versions: &[u8]) -> Result<(), Error> {
 		self.io_service.send_message(NetworkIoMessage::AddHandler {
 			handler: handler,
