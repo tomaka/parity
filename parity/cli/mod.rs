@@ -430,13 +430,25 @@ usage! {
 			"--no-serve-light",
 			"Disable serving of light peers.",
 
+			FLAG flag_no_devp2p: (bool) = false, or |_| None,
+			"--no-devp2p",
+			"Disable the devp2p network backend.",
+
+			FLAG flag_with_libp2p: (bool) = false, or |_| None,
+			"--with-devp2p",
+			"Enables the libp2p network backend.",
+
 			ARG arg_warp_barrier: (Option<u64>) = None, or |c: &Config| c.network.as_ref()?.warp_barrier.clone(),
 			"--warp-barrier=[NUM]",
 			"When warp enabled never attempt regular sync before warping to block NUM.",
 
 			ARG arg_port: (u16) = 30303u16, or |c: &Config| c.network.as_ref()?.port.clone(),
 			"--port=[PORT]",
-			"Override the port on which the node should listen.",
+			"Override the port on which the node should listen with devp2p.",
+
+			ARG arg_libp2p_port: (u16) = 10303u16, or |c: &Config| c.network.as_ref()?.libp2p_port.clone(),
+			"--libp2p-port=[PORT]",
+			"Override the port on which the node should listen with libp2p.",
 
 			ARG arg_min_peers: (Option<u16>) = None, or |c: &Config| c.network.as_ref()?.min_peers.clone(),
 			"--min-peers=[NUM]",
@@ -468,7 +480,11 @@ usage! {
 
 			ARG arg_bootnodes: (Option<String>) = None, or |c: &Config| c.network.as_ref()?.bootnodes.as_ref().map(|vec| vec.join(",")),
 			"--bootnodes=[NODES]",
-			"Override the bootnodes from our chain. NODES should be comma-delimited enodes.",
+			"Override the bootnodes from our chain for devp2p. NODES should be comma-delimited enodes.",
+
+			ARG arg_libp2p_bootnodes: (Option<String>) = None, or |c: &Config| c.network.as_ref()?.libp2p_bootnodes.as_ref().map(|vec| vec.join(",")),
+			"--libp2p-bootnodes=[NODES]",
+			"Override the bootnodes from our chain for libp2p. NODES should be comma-delimited enodes.",
 
 			ARG arg_node_key: (Option<String>) = None, or |c: &Config| c.network.as_ref()?.node_key.clone(),
 			"--node-key=[KEY]",
@@ -1119,6 +1135,7 @@ struct Network {
 	warp: Option<bool>,
 	warp_barrier: Option<u64>,
 	port: Option<u16>,
+	libp2p_port: Option<u16>,
 	min_peers: Option<u16>,
 	max_peers: Option<u16>,
 	snapshot_peers: Option<u16>,
@@ -1127,11 +1144,14 @@ struct Network {
 	allow_ips: Option<String>,
 	id: Option<u64>,
 	bootnodes: Option<Vec<String>>,
+	libp2p_bootnodes: Option<Vec<String>>,
 	discovery: Option<bool>,
 	node_key: Option<String>,
 	reserved_peers: Option<String>,
 	reserved_only: Option<bool>,
 	no_serve_light: Option<bool>,
+	no_devp2p: Option<bool>,
+	with_libp2p: Option<bool>,
 }
 
 #[derive(Default, Debug, PartialEq, Deserialize)]
@@ -1567,6 +1587,7 @@ mod tests {
 			// -- Networking Options
 			flag_no_warp: false,
 			arg_port: 30303u16,
+			arg_libp2p_port: 10303u16,
 			arg_min_peers: Some(25u16),
 			arg_max_peers: Some(50u16),
 			arg_max_pending_peers: 64u16,
@@ -1575,12 +1596,15 @@ mod tests {
 			arg_nat: "any".into(),
 			arg_network_id: Some(1),
 			arg_bootnodes: Some("".into()),
+			arg_libp2p_bootnodes: Some("".into()),
 			flag_no_discovery: false,
 			arg_node_key: None,
 			arg_reserved_peers: Some("./path_to_file".into()),
 			flag_reserved_only: false,
 			flag_no_ancient_blocks: false,
 			flag_no_serve_light: false,
+			flag_no_devp2p: false,
+			flag_with_libp2p: false,
 
 			// -- API and Console Options
 			// RPC
@@ -1823,6 +1847,7 @@ mod tests {
 				warp: Some(false),
 				warp_barrier: None,
 				port: None,
+				libp2p_port: None,
 				min_peers: Some(10),
 				max_peers: Some(20),
 				max_pending_peers: Some(30),
@@ -1831,11 +1856,14 @@ mod tests {
 				nat: Some("any".into()),
 				id: None,
 				bootnodes: None,
+				libp2p_bootnodes: None,
 				discovery: Some(true),
 				node_key: None,
 				reserved_peers: Some("./path/to/reserved_peers".into()),
 				reserved_only: Some(true),
 				no_serve_light: None,
+				no_devp2p: None,
+				with_libp2p: None,
 			}),
 			websockets: Some(Ws {
 				disable: Some(true),

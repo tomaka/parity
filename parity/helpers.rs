@@ -27,8 +27,10 @@ use cache::CacheConfig;
 use dir::DatabaseDirectories;
 use dir::helpers::replace_home;
 use upgrade::{upgrade, upgrade_data_paths};
-use sync::{validate_node_url, self};
 use db::migrate;
+use sync::{validate_devp2p_node_url, self};
+use kvdb::{KeyValueDB, KeyValueDBHandler};
+use kvdb_rocksdb::{Database, DatabaseConfig, CompactionProfile};
 use path;
 
 pub fn to_duration(s: &str) -> Result<Duration, String> {
@@ -166,7 +168,7 @@ pub fn parity_ipc_path(base: &str, path: &str, shift: u16) -> String {
 pub fn to_bootnodes(bootnodes: &Option<String>) -> Result<Vec<String>, String> {
 	match *bootnodes {
 		Some(ref x) if !x.is_empty() => x.split(',').map(|s| {
-			match validate_node_url(s).map(Into::into) {
+			match validate_devp2p_node_url(s).map(Into::into) {
 				None => Ok(s.to_owned()),
 				Some(sync::ErrorKind::AddressResolve(_)) => Err(format!("Failed to resolve hostname of a boot node: {}", s)),
 				Some(_) => Err(format!("Invalid node address format given for a boot node: {}", s)),
@@ -178,7 +180,7 @@ pub fn to_bootnodes(bootnodes: &Option<String>) -> Result<Vec<String>, String> {
 }
 
 #[cfg(test)]
-pub fn default_network_config() -> ::sync::NetworkConfiguration {
+pub fn default_network_config_devp2p() -> ::sync::NetworkConfiguration {
 	use sync::{NetworkConfiguration};
 	use super::network::IpFilter;
 	NetworkConfiguration {
@@ -199,6 +201,14 @@ pub fn default_network_config() -> ::sync::NetworkConfiguration {
 		reserved_nodes: Vec::new(),
 		allow_non_reserved: true,
 		client_version: ::parity_version::version(),
+	}
+}
+
+#[cfg(test)]
+pub fn default_network_config_libp2p() -> ::sync::NetworkConfiguration {
+	::sync::NetworkConfiguration {
+		listen_address: Some("0.0.0.0:10303".into()),
+		.. default_network_config_devp2p()
 	}
 }
 

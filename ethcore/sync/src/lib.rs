@@ -74,7 +74,8 @@ mod api;
 
 pub use api::*;
 pub use chain::{SyncStatus, SyncState};
-pub use devp2p::validate_node_url;      // TODO: move this to network?
+pub use devp2p::validate_node_url as validate_devp2p_node_url;
+pub use libp2p::validate_node_url as validate_libp2p_node_url;
 pub use network::{NonReservedPeerMode, Error, ErrorKind, ConnectionFilter, ConnectionDirection};
 pub use net_backends_merge::NetworkConfiguration;
 pub use private_tx::{PrivateTxHandler, NoopPrivateTxHandler, SimplePrivateTxHandler};

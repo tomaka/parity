@@ -42,3 +42,11 @@ extern crate log;
 mod service;
 
 pub use service::NetworkService;
+
+/// Check if node url is valid
+pub fn validate_node_url(url: &str) -> Result<(), network::Error> {
+    match url.parse::<multiaddr::Multiaddr>() {
+        Ok(_) => Ok(()),
+        Err(_) => Err(network::ErrorKind::InvalidNodeId.into()),
+    }
+}

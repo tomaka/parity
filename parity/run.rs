@@ -98,7 +98,8 @@ pub struct RunCmd {
 	pub ws_conf: rpc::WsConfiguration,
 	pub http_conf: rpc::HttpConfiguration,
 	pub ipc_conf: rpc::IpcConfiguration,
-	pub net_conf: sync::NetworkConfiguration,
+	pub net_conf_devp2p: sync::NetworkConfiguration,
+	pub net_conf_libp2p: sync::NetworkConfiguration,
 	pub network_id: Option<u64>,
 	pub warp_sync: bool,
 	pub warp_barrier: Option<u64>,
@@ -125,7 +126,8 @@ pub struct RunCmd {
 	pub dapp: Option<String>,
 	pub ui: bool,
 	pub name: String,
-	pub custom_bootnodes: bool,
+	pub custom_bootnodes_devp2p: bool,
+	pub custom_bootnodes_libp2p: bool,
 	pub stratum: Option<stratum::Options>,
 	pub no_periodic_snapshot: bool,
 	pub check_seal: bool,
@@ -258,9 +260,13 @@ fn execute_light_impl(cmd: RunCmd, logger: Arc<RotatingLogger>) -> Result<Runnin
 
 	// start network.
 	// set up bootnodes
-	let mut net_conf = cmd.net_conf;
-	if !cmd.custom_bootnodes {
+	let mut net_conf_devp2p = cmd.net_conf_devp2p;
+	if !cmd.custom_bootnodes_devp2p {
 		net_conf.boot_nodes = spec.nodes.clone();
+	}
+	let mut net_conf_libp2p = cmd.net_conf_libp2p;
+	if !cmd.custom_bootnodes_libp2p {
+		net_conf.boot_nodes = spec.nodes.clone();		// TODO: libp2p bootnodes
 	}
 
 	let mut attached_protos = Vec::new();
@@ -273,15 +279,11 @@ fn execute_light_impl(cmd: RunCmd, logger: Arc<RotatingLogger>) -> Result<Runnin
 	};
 
 	// set network path.
-	net_conf.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());
+	net_conf_devp2p.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());
+	net_conf_libp2p.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());		// TODO: conflict?
 	let sync_params = LightSyncParams {
-		// TODO: do correctly
-		devp2p_network_config: Some(net_conf.clone().into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?),
-		libp2p_network_config: Some(
-			sync::NetworkConfiguration {
-				listen_address: Some("0.0.0.0:10333".to_owned()),
-				..net_conf.clone()
-			}.into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?),
+		devp2p_network_config: Some(net_conf_devp2p.clone().into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?),
+		libp2p_network_config: Some(net_conf_libp2p.clone().into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?),
 		client: Arc::new(provider),
 		network_id: cmd.network_id.unwrap_or(spec.network_id()),
 		subprotocol_name: sync::LIGHT_PROTOCOL,
@@ -608,7 +610,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	client_config.queue.verifier_settings = cmd.verifier_settings;
 
 	// set up bootnodes
-	let mut net_conf = cmd.net_conf;
+	let mut net_conf = cmd.net_conf_devp2p;
 	if !cmd.custom_bootnodes {
 		net_conf.boot_nodes = spec.nodes.clone();
 	}

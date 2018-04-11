@@ -27,7 +27,7 @@ use ethereum_types::{U256, H256, Address};
 use parity_version::{version_data, version};
 use bytes::Bytes;
 use ansi_term::Colour;
-use sync::{NetworkConfiguration, validate_node_url, self};
+use sync::{NetworkConfiguration, validate_devp2p_node_url, validate_libp2p_node_url, self};
 use ethcore::ethstore::ethkey::{Secret, Public};
 use ethcore::client::{VMType};
 use ethcore::miner::{stratum, MinerOptions};
@@ -123,7 +123,8 @@ impl Configuration {
 		let ws_conf = self.ws_config()?;
 		let http_conf = self.http_config()?;
 		let ipc_conf = self.ipc_config()?;
-		let net_conf = self.net_config()?;
+		let net_conf_devp2p = self.net_config_devp2p()?;
+		let net_conf_libp2p = self.net_config_libp2p()?;
 		let ui_conf = self.ui_config();
 		let network_id = self.network_id();
 		let cache_config = self.cache_config();
@@ -357,7 +358,8 @@ impl Configuration {
 				ws_conf: ws_conf,
 				http_conf: http_conf,
 				ipc_conf: ipc_conf,
-				net_conf: net_conf,
+				net_conf_devp2p: net_conf_devp2p,
+				net_conf_libp2p: net_conf_libp2p,
 				network_id: network_id,
 				acc_conf: self.accounts_config()?,
 				gas_pricer_conf: self.gas_pricer_config()?,
@@ -385,7 +387,8 @@ impl Configuration {
 				dapp: self.dapp_to_open()?,
 				ui: self.args.cmd_ui,
 				name: self.args.arg_identity,
-				custom_bootnodes: self.args.arg_bootnodes.is_some(),
+				custom_bootnodes_devp2p: self.args.arg_bootnodes.is_some(),
+				custom_bootnodes_libp2p: self.args.arg_libp2p_bootnodes.is_some(),
 				no_periodic_snapshot: self.args.flag_no_periodic_snapshot,
 				check_seal: !self.args.flag_no_seal_check,
 				download_old_blocks: !self.args.flag_no_ancient_blocks,
@@ -745,7 +748,7 @@ impl Configuration {
 				let lines = buffer.lines().map(|s| s.trim().to_owned()).filter(|s| !s.is_empty() && !s.starts_with("#")).collect::<Vec<_>>();
 
 				for line in &lines {
-					match validate_node_url(line).map(Into::into) {
+					match validate_devp2p_node_url(line).map(Into::into) {		// TODO: libp2p?
 						None => continue,
 						Some(sync::ErrorKind::AddressResolve(_)) => return Err(format!("Failed to resolve hostname of a boot node: {}", line)),
 						Some(_) => return Err(format!("Invalid node address format given for a boot node: {}", line)),
@@ -758,7 +761,7 @@ impl Configuration {
 		}
 	}
 
-	fn net_addresses(&self) -> Result<(SocketAddr, Option<SocketAddr>), String> {
+	fn net_addresses_devp2p(&self) -> Result<(SocketAddr, Option<SocketAddr>), String> {
 		let port = self.args.arg_ports_shift + self.args.arg_port;
 		let listen_address = SocketAddr::new("0.0.0.0".parse().unwrap(), port);
 		let public_address = if self.args.arg_nat.starts_with("extip:") {
@@ -771,11 +774,53 @@ impl Configuration {
 		Ok((listen_address, public_address))
 	}
 
-	fn net_config(&self) -> Result<NetworkConfiguration, String> {
+	fn net_addresses_libp2p(&self) -> Result<(SocketAddr, Option<SocketAddr>), String> {
+		let port = self.args.arg_ports_shift + self.args.arg_libp2p_port;
+		let listen_address = SocketAddr::new("0.0.0.0".parse().unwrap(), port);
+		let public_address = if self.args.arg_nat.starts_with("extip:") {
+			let host = &self.args.arg_nat[6..];
+			let host = host.parse().map_err(|_| format!("Invalid host given with `--nat extip:{}`", host))?;
+			Some(SocketAddr::new(host, port))
+		} else {
+			None
+		};
+		Ok((listen_address, public_address))
+	}
+
+	fn net_config_devp2p(&self) -> Result<NetworkConfiguration, String> {
 		let mut ret = NetworkConfiguration::new();
 		ret.nat_enabled = self.args.arg_nat == "any" || self.args.arg_nat == "upnp";
 		ret.boot_nodes = to_bootnodes(&self.args.arg_bootnodes)?;
-		let (listen, public) = self.net_addresses()?;
+		let (listen, public) = self.net_addresses_devp2p()?;
+		ret.listen_address = Some(format!("{}", listen));
+		ret.public_address = public.map(|p| format!("{}", p));
+		ret.use_secret = match self.args.arg_node_key.as_ref()
+			.map(|s| s.parse::<Secret>().or_else(|_| Secret::from_unsafe_slice(&keccak(s))).map_err(|e| format!("Invalid key: {:?}", e))
+			) {
+			None => None,
+			Some(Ok(key)) => Some(key),
+			Some(Err(err)) => return Err(err),
+		};
+		ret.discovery_enabled = !self.args.flag_no_discovery && !self.args.flag_nodiscover;
+		ret.max_peers = self.max_peers();
+		ret.min_peers = self.min_peers();
+		ret.snapshot_peers = self.snapshot_peers();
+		ret.ip_filter = self.ip_filter()?;
+		ret.max_pending_peers = self.max_pending_peers();
+		let mut net_path = PathBuf::from(self.directories().base);
+		net_path.push("network");
+		ret.config_path = Some(net_path.to_str().unwrap().to_owned());
+		ret.reserved_nodes = self.init_reserved_nodes()?;
+		ret.allow_non_reserved = !self.args.flag_reserved_only;
+		ret.client_version = version();
+		Ok(ret)
+	}
+
+	fn net_config_libp2p(&self) -> Result<NetworkConfiguration, String> {
+		let mut ret = NetworkConfiguration::new();
+		ret.nat_enabled = self.args.arg_nat == "any" || self.args.arg_nat == "upnp";
+		ret.boot_nodes = to_bootnodes(&self.args.arg_libp2p_bootnodes)?;		// TODO: ! not same format as devp2p
+		let (listen, public) = self.net_addresses_libp2p()?;
 		ret.listen_address = Some(format!("{}", listen));
 		ret.public_address = public.map(|p| format!("{}", p));
 		ret.use_secret = match self.args.arg_node_key.as_ref()
@@ -975,7 +1020,7 @@ impl Configuration {
 
 	fn network_settings(&self) -> Result<NetworkSettings, String> {
 		let http_conf = self.http_config()?;
-		let net_addresses = self.net_addresses()?;
+		let net_addresses = self.net_addresses_devp2p()?;		// TODO: libp2p?
 		Ok(NetworkSettings {
 			name: self.args.arg_identity.clone(),
 			chain: format!("{}", self.chain()?),
@@ -1252,7 +1297,7 @@ mod tests {
 	use blockchain::{BlockchainCmd, ImportBlockchain, ExportBlockchain, DataFormat, ExportState};
 	use cli::Args;
 	use dir::{Directories, default_hypervisor_path};
-	use helpers::{default_network_config};
+	use helpers::{default_network_config_devp2p, default_network_config_libp2p};
 	use params::SpecType;
 	use presale::ImportWallet;
 	use rpc::{WsConfiguration, UiConfiguration};
@@ -1490,7 +1535,8 @@ mod tests {
 			ws_conf: Default::default(),
 			http_conf: Default::default(),
 			ipc_conf: Default::default(),
-			net_conf: default_network_config(),
+			net_conf_devp2p: default_network_config_devp2p(),
+			net_conf_libp2p: default_network_config_libp2p(),
 			network_id: None,
 			public_node: false,
 			warp_sync: true,
@@ -1525,7 +1571,8 @@ mod tests {
 			ui: false,
 			dapp: None,
 			name: "".into(),
-			custom_bootnodes: false,
+			custom_bootnodes_devp2p: false,
+			custom_bootnodes_libp2p: false,
 			fat_db: Default::default(),
 			no_periodic_snapshot: false,
 			stratum: None,
@@ -1879,8 +1926,10 @@ mod tests {
 		let conf = Configuration::parse(&args).unwrap();
 		match conf.into_command().unwrap().cmd {
 			Cmd::Run(c) => {
-				assert_eq!(c.net_conf.min_peers, 50);
-				assert_eq!(c.net_conf.max_peers, 100);
+				assert_eq!(c.net_conf_devp2p.min_peers, 50);
+				assert_eq!(c.net_conf_devp2p.max_peers, 100);
+				assert_eq!(c.net_conf_libp2p.min_peers, 50);
+				assert_eq!(c.net_conf_libp2p.max_peers, 100);
 				assert_eq!(c.ipc_conf.enabled, false);
 				assert_eq!(c.dapps_conf.enabled, false);
 				assert_eq!(c.miner_options.force_sealing, true);
@@ -1957,7 +2006,8 @@ mod tests {
 		let conf = Configuration::parse(&args).unwrap();
 		match conf.into_command().unwrap().cmd {
 			Cmd::Run(c) => {
-				assert_eq!(c.net_conf.min_peers, 99);
+				assert_eq!(c.net_conf_devp2p.min_peers, 99);
+				assert_eq!(c.net_conf_libp2p.min_peers, 99);
 			},
 			_ => panic!("Should be Cmd::Run"),
 		}
@@ -1972,7 +2022,8 @@ mod tests {
 		let conf1 = parse(&["parity", "--ports-shift", "1", "--jsonrpc-port", "8544"]);
 
 		// then
-		assert_eq!(conf0.net_addresses().unwrap().0.port(), 30304);
+		assert_eq!(conf0.net_addresses_devp2p().unwrap().0.port(), 30304);
+		assert_eq!(conf0.net_addresses_libp2p().unwrap().0.port(), 10304);
 		assert_eq!(conf0.network_settings().unwrap().network_port, 30304);
 		assert_eq!(conf0.network_settings().unwrap().rpc_port, 8546);
 		assert_eq!(conf0.http_config().unwrap().port, 8546);
@@ -1984,7 +2035,8 @@ mod tests {
 		assert_eq!(conf0.stratum_options().unwrap().unwrap().port, 8009);
 
 
-		assert_eq!(conf1.net_addresses().unwrap().0.port(), 30304);
+		assert_eq!(conf1.net_addresses_devp2p().unwrap().0.port(), 30304);
+		assert_eq!(conf1.net_addresses_libp2p().unwrap().0.port(), 10304);
 		assert_eq!(conf1.network_settings().unwrap().network_port, 30304);
 		assert_eq!(conf1.network_settings().unwrap().rpc_port, 8545);
 		assert_eq!(conf1.http_config().unwrap().port, 8545);
@@ -2080,8 +2132,10 @@ mod tests {
 		let conf = Configuration::parse(&args).unwrap();
 		match conf.into_command().unwrap().cmd {
 			Cmd::Run(c) => {
-				assert_eq!(c.net_conf.min_peers, 25);
-				assert_eq!(c.net_conf.max_peers, 50);
+				assert_eq!(c.net_conf_devp2p.min_peers, 25);
+				assert_eq!(c.net_conf_devp2p.max_peers, 50);
+				assert_eq!(c.net_conf_libp2p.min_peers, 25);
+				assert_eq!(c.net_conf_libp2p.max_peers, 50);
 			},
 			_ => panic!("Should be Cmd::Run"),
 		}
@@ -2093,8 +2147,10 @@ mod tests {
 		let conf = Configuration::parse(&args).unwrap();
 		match conf.into_command().unwrap().cmd {
 			Cmd::Run(c) => {
-				assert_eq!(c.net_conf.min_peers, 5);
-				assert_eq!(c.net_conf.max_peers, 5);
+				assert_eq!(c.net_conf_devp2p.min_peers, 5);
+				assert_eq!(c.net_conf_devp2p.max_peers, 5);
+				assert_eq!(c.net_conf_libp2p.min_peers, 5);
+				assert_eq!(c.net_conf_libp2p.max_peers, 5);
 			},
 			_ => panic!("Should be Cmd::Run"),
 		}
@@ -2106,8 +2162,10 @@ mod tests {
 		let conf = Configuration::parse(&args).unwrap();
 		match conf.into_command().unwrap().cmd {
 			Cmd::Run(c) => {
-				assert_eq!(c.net_conf.min_peers, 5);
-				assert_eq!(c.net_conf.max_peers, 50);
+				assert_eq!(c.net_conf_devp2p.min_peers, 5);
+				assert_eq!(c.net_conf_devp2p.max_peers, 50);
+				assert_eq!(c.net_conf_libp2p.min_peers, 5);
+				assert_eq!(c.net_conf_libp2p.max_peers, 50);
 			},
 			_ => panic!("Should be Cmd::Run"),
 		}
@@ -2119,8 +2177,10 @@ mod tests {
 		let conf = Configuration::parse(&args).unwrap();
 		match conf.into_command().unwrap().cmd {
 			Cmd::Run(c) => {
-				assert_eq!(c.net_conf.min_peers, 500);
-				assert_eq!(c.net_conf.max_peers, 500);
+				assert_eq!(c.net_conf_devp2p.min_peers, 500);
+				assert_eq!(c.net_conf_devp2p.max_peers, 500);
+				assert_eq!(c.net_conf_libp2p.min_peers, 500);
+				assert_eq!(c.net_conf_libp2p.max_peers, 500);
 			},
 			_ => panic!("Should be Cmd::Run"),
 		}
