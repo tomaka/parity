@@ -125,19 +125,19 @@ impl NetworkService {
 				// Build the storage for peers.
 				let peerstore = Arc::new(MemoryPeerstore::empty());
 				for bootnode in config.boot_nodes.iter() {
-					// TODO: solve the question of the boot nodes format
-					let addr: ::std::net::SocketAddr = bootnode.parse().unwrap();		// TODO:
-					let addr: Multiaddr = {
-						let ip = match addr.ip() {
-							IpAddr::V4(addr) => AddrComponent::IP4(addr),
-							IpAddr::V6(addr) => AddrComponent::IP6(addr),
-						};
-						iter::once(ip).chain(iter::once(AddrComponent::TCP(addr.port()))).collect()
+					let mut addr: Multiaddr = bootnode.parse().expect("wrong libp2p bootnode format");		// TODO: don't unwrap
+					let p2p_component = addr.pop().expect("bootnode multiaddr is empty");		// TODO: don't unwrap
+					let peer_id = match p2p_component {
+						AddrComponent::P2P(key) | AddrComponent::IPFS(key) => {
+							PeerstorePeerId::from_bytes(key).expect("invalid peer id")
+						}
+						_ => panic!("bootnode multiaddr didn't end with /p2p/"),
 					};
+
 					// Registering the bootstrap node with a TTL of 100000 years
 					peerstore
-						.peer_or_create(&PeerstorePeerId::from_public_key(&[0, 1, 2, 3]))
-						.add_addr(addr.into(), Duration::from_secs(100000 * 365 * 24 * 3600));
+						.peer_or_create(&peer_id)
+						.add_addr(addr, Duration::from_secs(100000 * 365 * 24 * 3600));
 				}
 
 				// Configuration for Kademlia DHT.
@@ -225,7 +225,7 @@ impl NetworkService {
 						iter::once(host).chain(iter::once(port)).collect()
 					};
 
-					info!("Listening on {}", listen_addr);
+					info!(target: "eth-libp2p", "Libp2p listening on {}", listen_addr);		// TODO: no info!
 					if let Err(err) = swarm_controller.listen_on(listen_addr.clone()) {		// TODO: don't clone
 						warn!("Failed to listen on {}: {:?}", listen_addr, err);	// TODO: temporary, remove
 						//let _ = init_tx.send(Err(err));		// TODO:
@@ -266,8 +266,11 @@ impl NetworkService {
 					.and_then(move |()| kad_controller.find_node(local_peer_id.clone()))
 					.for_each(move |results| {
 						for discovered_peer in results {
+							if shared.peer_by_nodeid.read().contains_key(discovered_peer.as_bytes()) {
+								continue;
+							}
+
 							let addr: Multiaddr = AddrComponent::P2P(discovered_peer.into_bytes()).into();
-							// TODO: dial individually for each registered protocol
 							for proto_num in 0 .. shared.protocols.read().len() {
 								let upgr = CustomProtoConnectionUpgrade(shared.clone(), proto_num);
 								let _ = swarm_controller.dial_to_handler(addr.clone(), upgr);	

@@ -28,7 +28,7 @@ use dir::DatabaseDirectories;
 use dir::helpers::replace_home;
 use upgrade::{upgrade, upgrade_data_paths};
 use db::migrate;
-use sync::{validate_devp2p_node_url, self};
+use sync::{validate_devp2p_node_url, validate_libp2p_node_url, self};
 use kvdb::{KeyValueDB, KeyValueDBHandler};
 use kvdb_rocksdb::{Database, DatabaseConfig, CompactionProfile};
 use path;
@@ -164,14 +164,30 @@ pub fn parity_ipc_path(base: &str, path: &str, shift: u16) -> String {
 	replace_home(base, &path)
 }
 
-/// Validates and formats bootnodes option.
-pub fn to_bootnodes(bootnodes: &Option<String>) -> Result<Vec<String>, String> {
+/// Validates and formats bootnodes option for devp2p.
+pub fn to_bootnodes_devp2p(bootnodes: &Option<String>) -> Result<Vec<String>, String> {
 	match *bootnodes {
 		Some(ref x) if !x.is_empty() => x.split(',').map(|s| {
 			match validate_devp2p_node_url(s).map(Into::into) {
 				None => Ok(s.to_owned()),
 				Some(sync::ErrorKind::AddressResolve(_)) => Err(format!("Failed to resolve hostname of a boot node: {}", s)),
 				Some(_) => Err(format!("Invalid node address format given for a boot node: {}", s)),
+			}
+		}).collect(),
+		Some(_) => Ok(vec![]),
+		None => Ok(vec![])
+	}
+}
+
+/// Validates and formats bootnodes option for libp2p.
+pub fn to_bootnodes_libp2p(bootnodes: &Option<String>) -> Result<Vec<String>, String> {
+	// TODO: do better!
+	match *bootnodes {
+		Some(ref x) if !x.is_empty() => x.split(',').map(|s| {
+			match validate_libp2p_node_url(s).map_err(Into::into) {
+				Ok(()) => Ok(s.to_owned()),
+				Err(sync::ErrorKind::AddressResolve(_)) => Err(format!("Failed to resolve hostname of a boot node: {}", s)),
+				Err(_) => Err(format!("Invalid node address format given for a boot node: {}", s)),
 			}
 		}).collect(),
 		Some(_) => Ok(vec![]),

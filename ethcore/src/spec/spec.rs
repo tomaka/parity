@@ -308,8 +308,10 @@ pub struct Spec {
 	/// Name of the subdir inside the main data dir to use for chain data and settings.
 	pub data_dir: String,
 
-	/// Known nodes on the network in enode format.
-	pub nodes: Vec<String>,
+	/// Known nodes on the network in enode format, for devp2p.
+	pub nodes_devp2p: Vec<String>,
+	/// Multiaddresses of known nodes on the network, with `/p2p/...` at the end, for libp2p.
+	pub nodes_libp2p: Vec<String>,
 
 	/// The genesis block's parent hash field.
 	pub parent_hash: H256,
@@ -352,7 +354,8 @@ impl Clone for Spec {
 			name: self.name.clone(),
 			engine: self.engine.clone(),
 			data_dir: self.data_dir.clone(),
-			nodes: self.nodes.clone(),
+			nodes_devp2p: self.nodes_devp2p.clone(),
+			nodes_libp2p: self.nodes_libp2p.clone(),
 			parent_hash: self.parent_hash.clone(),
 			transactions_root: self.transactions_root.clone(),
 			receipts_root: self.receipts_root.clone(),
@@ -449,7 +452,8 @@ fn load_from(spec_params: SpecParams, s: ethjson::spec::Spec) -> Result<Spec, Er
 		name: s.name.clone().into(),
 		engine: Spec::engine(spec_params, s.engine, params, builtins),
 		data_dir: s.data_dir.unwrap_or(s.name).into(),
-		nodes: s.nodes.unwrap_or_else(Vec::new),
+		nodes_devp2p: s.nodes_devp2p.unwrap_or_else(Vec::new),
+		nodes_libp2p: s.nodes_libp2p.unwrap_or_else(Vec::new),
 		parent_hash: g.parent_hash,
 		transactions_root: g.transactions_root,
 		receipts_root: g.receipts_root,
@@ -630,9 +634,17 @@ impl Spec {
 		&self.engine.params()
 	}
 
-	/// Get the known knodes of the network in enode format.
-	pub fn nodes(&self) -> &[String] {
-		&self.nodes
+	/// Get the known knodes of the network in enode format for devp2p.
+	pub fn nodes_devp2p(&self) -> &[String] {
+		&self.nodes_devp2p
+	}
+
+	/// Get the multiaddresses of the known knodes of the network for libp2p,
+	/// with `/p2p/...` at the end.
+	///
+	/// Example: `/ip4/1.2.3.4/tcp/10333/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ`.
+	pub fn nodes_libp2p(&self) -> &[String] {
+		&self.nodes_libp2p
 	}
 
 	/// Get the configured Network ID.

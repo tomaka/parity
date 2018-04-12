@@ -138,6 +138,8 @@ pub struct RunCmd {
 	pub no_persistent_txqueue: bool,
 	pub whisper: ::whisper::Config,
 	pub no_hardcoded_sync: bool,
+	pub with_devp2p: bool,
+	pub with_libp2p: bool,
 }
 
 pub fn open_ui(ws_conf: &rpc::WsConfiguration, ui_conf: &rpc::UiConfiguration, logger_config: &LogConfig) -> Result<(), String> {
@@ -262,11 +264,11 @@ fn execute_light_impl(cmd: RunCmd, logger: Arc<RotatingLogger>) -> Result<Runnin
 	// set up bootnodes
 	let mut net_conf_devp2p = cmd.net_conf_devp2p;
 	if !cmd.custom_bootnodes_devp2p {
-		net_conf.boot_nodes = spec.nodes.clone();
+		net_conf_devp2p.boot_nodes = spec.nodes_devp2p.clone();
 	}
 	let mut net_conf_libp2p = cmd.net_conf_libp2p;
 	if !cmd.custom_bootnodes_libp2p {
-		net_conf.boot_nodes = spec.nodes.clone();		// TODO: libp2p bootnodes
+		net_conf_libp2p.boot_nodes = spec.nodes_libp2p.clone();
 	}
 
 	let mut attached_protos = Vec::new();
@@ -282,8 +284,16 @@ fn execute_light_impl(cmd: RunCmd, logger: Arc<RotatingLogger>) -> Result<Runnin
 	net_conf_devp2p.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());
 	net_conf_libp2p.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());		// TODO: conflict?
 	let sync_params = LightSyncParams {
-		devp2p_network_config: Some(net_conf_devp2p.clone().into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?),
-		libp2p_network_config: Some(net_conf_libp2p.clone().into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?),
+		devp2p_network_config: if cmd.with_devp2p {
+			Some(net_conf_devp2p.clone().into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?)
+		} else {
+			None
+		},
+		libp2p_network_config: if cmd.with_libp2p {
+			Some(net_conf_libp2p.clone().into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?)
+		} else {
+			None
+		},
 		client: Arc::new(provider),
 		network_id: cmd.network_id.unwrap_or(spec.network_id()),
 		subprotocol_name: sync::LIGHT_PROTOCOL,
@@ -610,13 +620,18 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	client_config.queue.verifier_settings = cmd.verifier_settings;
 
 	// set up bootnodes
-	let mut net_conf = cmd.net_conf_devp2p;
-	if !cmd.custom_bootnodes {
-		net_conf.boot_nodes = spec.nodes.clone();
+	let mut net_conf_devp2p = cmd.net_conf_devp2p;
+	if !cmd.custom_bootnodes_devp2p {
+		net_conf_devp2p.boot_nodes = spec.nodes_devp2p.clone();
+	}
+	let mut net_conf_libp2p = cmd.net_conf_libp2p;
+	if !cmd.custom_bootnodes_libp2p {
+		net_conf_libp2p.boot_nodes = spec.nodes_libp2p.clone();
 	}
 
 	// set network path.
-	net_conf.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());
+	net_conf_devp2p.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());
+	net_conf_libp2p.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());		// TODO: conflict?
 
 	let client_db = db::open_client_db(&client_path, &client_config)?;
 	let restoration_db_handler = db::restoration_db_handler(&client_path, &client_config);
@@ -711,13 +726,8 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// create sync object
 	let (sync_provider, manage_network, chain_notify) = modules::sync(
 		sync_config,
-		Some(net_conf.clone().into()),
-		Some(
-			sync::NetworkConfiguration {
-				listen_address: Some("0.0.0.0:10333".to_owned()),
-				boot_nodes: vec!["127.0.0.1:10333".to_owned()],
-				..net_conf.clone()
-			}.into()),
+		if cmd.with_devp2p { Some(net_conf_devp2p.clone().into()) } else { None },		// TODO: maybe don't clone if possible
+		if cmd.with_libp2p { Some(net_conf_libp2p.into()) } else { None },
 		client.clone(),
 		snapshot_service.clone(),
 		private_tx_service.clone(),
@@ -784,7 +794,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 			}
 		}
 
-		let sync_status = Arc::new(SyncStatus(sync, client, net_conf));
+		let sync_status = Arc::new(SyncStatus(sync, client, net_conf_devp2p));	// TODO: libp2p
 		let node_health = node_health::NodeHealth::new(
 			sync_status.clone(),
 			node_health::TimeChecker::new(&cmd.ntp_servers, cpu_pool.clone()),

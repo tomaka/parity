@@ -265,7 +265,7 @@ impl EthSync {
 			false => None,
 			true => Some({
 				// TODO: correctly handle devp2p here
-				let sample_store = params.devp2p_network_config.as_ref().unwrap().net_config_path
+				let sample_store = params.libp2p_network_config.as_ref().unwrap().net_config_path
 					.clone()
 					.map(::std::path::PathBuf::from)
 					.map(|mut p| { p.push("request_timings"); light_net::FileStore(p) })
@@ -284,7 +284,7 @@ impl EthSync {
 				};
 
 				// TODO: correctly handle devp2p here
-				let max_peers = ::std::cmp::min(params.devp2p_network_config.as_ref().unwrap().max_peers, 1);
+				let max_peers = ::std::cmp::min(params.libp2p_network_config.as_ref().unwrap().max_peers, 1);
 				light_params.config.load_share = MAX_LIGHTSERV_LOAD / max_peers as f64;
 
 				let mut light_proto = LightProtocol::new(params.provider, light_params);

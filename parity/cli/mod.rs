@@ -435,7 +435,7 @@ usage! {
 			"Disable the devp2p network backend.",
 
 			FLAG flag_with_libp2p: (bool) = false, or |_| None,
-			"--with-devp2p",
+			"--with-libp2p",
 			"Enables the libp2p network backend.",
 
 			ARG arg_warp_barrier: (Option<u64>) = None, or |c: &Config| c.network.as_ref()?.warp_barrier.clone(),

@@ -38,7 +38,8 @@ use rpc::{IpcConfiguration, HttpConfiguration, WsConfiguration, UiConfiguration}
 use rpc_apis::ApiSet;
 use parity_rpc::NetworkSettings;
 use cache::CacheConfig;
-use helpers::{to_duration, to_mode, to_block_id, to_u256, to_pending_set, to_price, geth_ipc_path, parity_ipc_path, to_bootnodes, to_addresses, to_address, to_queue_strategy, to_queue_penalization, passwords_from_files};
+use helpers::{to_duration, to_mode, to_block_id, to_u256, to_pending_set, to_price, geth_ipc_path, parity_ipc_path,
+to_bootnodes_devp2p, to_bootnodes_libp2p, to_addresses, to_address, to_gas_limit, to_queue_strategy, to_queue_penalization, passwords_from_files};
 use dir::helpers::{replace_home, replace_home_and_local};
 use params::{ResealPolicy, AccountsConfig, GasPricerConfig, MinerExtras, SpecType};
 use ethcore_logger::Config as LogConfig;
@@ -398,6 +399,8 @@ impl Configuration {
 				no_persistent_txqueue: self.args.flag_no_persistent_txqueue,
 				whisper: whisper_config,
 				no_hardcoded_sync: self.args.flag_no_hardcoded_sync,
+				with_devp2p: !self.args.flag_no_devp2p,
+				with_libp2p: self.args.flag_with_libp2p,
 			};
 			Cmd::Run(run_cmd)
 		};
@@ -790,7 +793,7 @@ impl Configuration {
 	fn net_config_devp2p(&self) -> Result<NetworkConfiguration, String> {
 		let mut ret = NetworkConfiguration::new();
 		ret.nat_enabled = self.args.arg_nat == "any" || self.args.arg_nat == "upnp";
-		ret.boot_nodes = to_bootnodes(&self.args.arg_bootnodes)?;
+		ret.boot_nodes = to_bootnodes_devp2p(&self.args.arg_bootnodes)?;
 		let (listen, public) = self.net_addresses_devp2p()?;
 		ret.listen_address = Some(format!("{}", listen));
 		ret.public_address = public.map(|p| format!("{}", p));
@@ -819,7 +822,7 @@ impl Configuration {
 	fn net_config_libp2p(&self) -> Result<NetworkConfiguration, String> {
 		let mut ret = NetworkConfiguration::new();
 		ret.nat_enabled = self.args.arg_nat == "any" || self.args.arg_nat == "upnp";
-		ret.boot_nodes = to_bootnodes(&self.args.arg_libp2p_bootnodes)?;		// TODO: ! not same format as devp2p
+		ret.boot_nodes = to_bootnodes_libp2p(&self.args.arg_libp2p_bootnodes)?;
 		let (listen, public) = self.net_addresses_libp2p()?;
 		ret.listen_address = Some(format!("{}", listen));
 		ret.public_address = public.map(|p| format!("{}", p));
