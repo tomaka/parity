@@ -200,10 +200,16 @@ impl NetBackend {
 				net.register_protocol(Arc::new(Libp2pHandlerWrapper(handler, Arc::downgrade(&self.inner))), protocol, packet_count, versions)
 			},
 			NetBackendInner::Both(ref devp2p, ref libp2p) => {
-				// TODO: what to do in case of error?
-				// TODO: initialize called twice?
+				// TODO: what to do in case of error? unregister?
 				devp2p.register_protocol(Arc::new(Devp2pHandlerWrapper(handler.clone(), Arc::downgrade(&self.inner))), protocol, packet_count, versions)?;
 				libp2p.register_protocol(Arc::new(Libp2pHandlerWrapper(handler, Arc::downgrade(&self.inner))), protocol, packet_count, versions)?;
+
+				let io = MergedNetworkContext {
+					devp2p: self.inner.devp2p(),
+					libp2p: self.inner.libp2p(),
+					context: MergedNetworkContextInner::None,
+				};
+				handler.initialize(&io, &DummyHostInfo);
 				Ok(())
 			},
 		}
@@ -346,6 +352,7 @@ pub struct MergedNetworkContext<'a> {
 enum MergedNetworkContextInner<'a> {
 	Devp2p(&'a NetworkContext),
 	Libp2p(&'a NetworkContext),
+	None,
 }
 
 impl<'a> NetworkContext for MergedNetworkContext<'a> {
@@ -407,6 +414,7 @@ impl<'a> NetworkContext for MergedNetworkContext<'a> {
 		match self.context {
 			MergedNetworkContextInner::Devp2p(ref net) => net.respond(packet_id, data),
 			MergedNetworkContextInner::Libp2p(ref net) => net.respond(packet_id, data),
+			MergedNetworkContextInner::None => panic!("respond called outside of a session"),
 		}
 	}
 
@@ -456,6 +464,7 @@ impl<'a> NetworkContext for MergedNetworkContext<'a> {
 		match self.context {
 			MergedNetworkContextInner::Devp2p(ref net) => net.is_expired(),
 			MergedNetworkContextInner::Libp2p(ref net) => net.is_expired(),
+			MergedNetworkContextInner::None => panic!("is_expired called outside of a session"),
 		}
 	}
 
@@ -560,14 +569,8 @@ struct Devp2pHandlerWrapper(Arc<NetworkProtocolHandler + Send + Sync>, Weak<NetB
 
 impl NetworkProtocolHandler for Devp2pHandlerWrapper {
 	fn initialize(&self, io: &NetworkContext, host_info: &HostInfo) {
-		// TODO: initialized twice in case we have both devp2p and libp2p	
-		/*let inner = self.1.upgrade().unwrap();
-		let io = MergedNetworkContext {
-			devp2p: inner.devp2p(),
-			libp2p: inner.libp2p(),
-			context: MergedNetworkContextInner::Devp2p(io),
-		};
-		self.0.initialize(&io, &DummyHostInfo)*/
+		// We're not calling `io.initialize()` because it's handled when the protocol is being
+		// registered.
 	}
 
 	fn read(&self, io: &NetworkContext, peer: &PeerId, packet_id: u8, data: &[u8]) {
@@ -616,13 +619,8 @@ struct Libp2pHandlerWrapper(Arc<NetworkProtocolHandler + Send + Sync>, Weak<NetB
 
 impl NetworkProtocolHandler for Libp2pHandlerWrapper {
 	fn initialize(&self, io: &NetworkContext, host_info: &HostInfo) {
-		let inner = self.1.upgrade().unwrap();
-		let io = MergedNetworkContext {
-			devp2p: inner.devp2p(),
-			libp2p: inner.libp2p(),
-			context: MergedNetworkContextInner::Libp2p(io),
-		};
-		self.0.initialize(&io, &DummyHostInfo)
+		// We're not calling `io.initialize()` because it's handled when the protocol is being
+		// registered.
 	}
 
 	fn read(&self, io: &NetworkContext, peer: &PeerId, packet_id: u8, data: &[u8]) {
