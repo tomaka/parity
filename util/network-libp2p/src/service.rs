@@ -480,10 +480,10 @@ impl NetworkContext for NetworkContextImpl {
 			.is_none()
 	}
 
-	fn register_timer(&self, token: usize, ms: u64) -> Result<(), Error> {
+	fn register_timer(&self, token: usize, duration: Duration) -> Result<(), Error> {
 		// TODO: don't unwrap
 		let handler = self.inner.protocols.read().iter().find(|p| p.id == self.protocol).unwrap().handler.clone();
-		let at = Instant::now() + Duration::from_millis(ms);
+		let at = Instant::now() + duration;
 		self.inner.timeouts_register_tx.unbounded_send((at, handler, self.protocol, token));
 		Ok(())		// TODO: error handling
 	}
@@ -504,7 +504,7 @@ impl NetworkContext for NetworkContextImpl {
 			protocol_version: 1,
 			capabilities: Vec::new(),
 			peer_capabilities: Vec::new(),
-			ping_ms: None,
+			ping: None,
 			originated: false,
 			remote_address: String::new(),
 			local_address: String::new(),

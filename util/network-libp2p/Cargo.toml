@@ -10,8 +10,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 bytes = "0.4"
 fnv = "1.0"
 futures = "0.1"
-#multiaddr = "0.3"
-multiaddr = { git = "https://github.com/multiformats/rust-multiaddr", rev = "cc39c90" }
+multiaddr = "0.3"
 multiplex = { git = "https://github.com/tomaka/libp2p-rs", branch = "zksummit" }
 libp2p-dns = { git = "https://github.com/tomaka/libp2p-rs", branch = "zksummit" }
 libp2p-identify = { git = "https://github.com/tomaka/libp2p-rs", branch = "zksummit" }

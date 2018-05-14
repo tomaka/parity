@@ -859,7 +859,7 @@ dependencies = [
  "libp2p-tcp-transport 0.1.0 (git+https://github.com/tomaka/libp2p-rs?branch=zksummit)",
  "libp2p-websocket 0.1.0 (git+https://github.com/tomaka/libp2p-rs?branch=zksummit)",
  "log 0.3.9 (registry+https://github.com/rust-lang/crates.io-index)",
- "multiaddr 0.2.0 (git+https://github.com/multiformats/rust-multiaddr?rev=cc39c90)",
+ "multiaddr 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "multiplex 0.1.0 (git+https://github.com/tomaka/libp2p-rs?branch=zksummit)",
  "parking_lot 0.5.4 (registry+https://github.com/rust-lang/crates.io-index)",
  "slab 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -2072,16 +2072,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 dependencies = [
  "time 0.1.38 (registry+https://github.com/rust-lang/crates.io-index)",
  "winapi 0.3.4 (registry+https://github.com/rust-lang/crates.io-index)",
-]
-
-[[package]]
-name = "multiaddr"
-version = "0.2.0"
-source = "git+https://github.com/multiformats/rust-multiaddr?rev=cc39c90#cc39c90fdde4d0b0ec24ee887fcd62a1bec67677"
-dependencies = [
- "byteorder 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
- "cid 0.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
- "integer-encoding 1.0.3 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
 [[package]]
@@ -4337,6 +4327,11 @@ dependencies = [
  "time 0.1.38 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
 
+[[patch.unused]]
+name = "multiaddr"
+version = "0.2.0"
+source = "git+https://github.com/multiformats/rust-multiaddr?rev=cc39c90#cc39c90fdde4d0b0ec24ee887fcd62a1bec67677"
+
 [metadata]
 "checksum adler32 1.0.2 (registry+https://github.com/rust-lang/crates.io-index)" = "6cbd0b9af8587c72beadc9f72d35b9fbb070982c9e6203e46e93f10df25f8f45"
 "checksum aho-corasick 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)" = "d6531d44de723825aa81398a6415283229725a00fa30713812ab9323faa82fc4"
@@ -4489,7 +4484,6 @@ dependencies = [
 "checksum mio-uds 0.6.4 (registry+https://github.com/rust-lang/crates.io-index)" = "1731a873077147b626d89cc6c2a0db6288d607496c5d10c0cfcf3adc697ec673"
 "checksum miow 0.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "8c1f2f3b1cf331de6896aabf6e9d55dca90356cc9960cca7eaaf408a355ae919"
 "checksum msdos_time 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)" = "aad9dfe950c057b1bfe9c1f2aa51583a8468ef2a5baba2ebbe06d775efeb7729"
-"checksum multiaddr 0.2.0 (git+https://github.com/multiformats/rust-multiaddr?rev=cc39c90)" = "<none>"
 "checksum multiaddr 0.3.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b97d4088dff9e0a93617a3f00213c6c1e338342c45de23cf317e613eb8e04e36"
 "checksum multibase 0.6.0 (registry+https://github.com/rust-lang/crates.io-index)" = "b9c35dac080fd6e16a99924c8dfdef0af89d797dd851adab25feaffacf7850d6"
 "checksum multihash 0.7.0 (git+https://github.com/tomaka/rust-multihash?branch=emscripten-hack)" = "<none>"

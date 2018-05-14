@@ -37,6 +37,7 @@ use light::client::AsLightClient;
 use light::Provider;
 use light::net::{self as light_net, LightProtocol, Params as LightParams, Capabilities, Handler as LightHandler, EventContext};
 use private_tx::PrivateTxHandler;
+use transaction::UnverifiedTransaction;
 use net_backends_merge::{NetBackend, NetworkConfiguration};
 
 /// Parity sync protocol

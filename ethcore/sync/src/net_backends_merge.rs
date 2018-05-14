@@ -32,6 +32,7 @@ use io::{TimerToken};
 use ethcore::ethstore::ethkey::Secret;
 use std::net::{SocketAddr, AddrParseError};
 use std::str::FromStr;
+use std::time::Duration;
 use network::IpFilter;
 use api::WARP_SYNC_PROTOCOL_ID;
 
@@ -468,10 +469,15 @@ impl<'a> NetworkContext for MergedNetworkContext<'a> {
 		}
 	}
 
-	fn register_timer(&self, token: TimerToken, ms: u64) -> Result<(), Error> {
+	fn register_timer(&self, token: TimerToken, duration: Duration) -> Result<(), Error> {
 		match self.context {
-			MergedNetworkContextInner::Devp2p(ref net) => net.register_timer(token, ms),
-			MergedNetworkContextInner::Libp2p(ref net) => net.register_timer(token, ms),
+			MergedNetworkContextInner::Devp2p(ref net) => net.register_timer(token, duration),
+			MergedNetworkContextInner::Libp2p(ref net) => net.register_timer(token, duration),
+			MergedNetworkContextInner::None => {
+				if let Some(ref devp2p) = self.devp2p {
+					devp2p.register_timer
+				}
+			}
 		}
 	}
 
@@ -569,7 +575,7 @@ struct Devp2pHandlerWrapper(Arc<NetworkProtocolHandler + Send + Sync>, Weak<NetB
 
 impl NetworkProtocolHandler for Devp2pHandlerWrapper {
 	fn initialize(&self, io: &NetworkContext, host_info: &HostInfo) {
-		// We're not calling `io.initialize()` because it's handled when the protocol is being
+		// We're not calling `self.0.initialize()` because it's handled when the protocol is being
 		// registered.
 	}
 
