@@ -192,22 +192,23 @@ impl NetBackend {
 	}
 
 	/// Register a new protocol handler with the event loop.
-	pub fn register_protocol(&self, handler: Arc<NetworkProtocolHandler + Send + Sync>, protocol: ProtocolId, packet_count: u8, versions: &[u8]) -> Result<(), Error> {
+	pub fn register_protocol(&self, handler: Arc<NetworkProtocolHandler + Send + Sync>, protocol: ProtocolId, versions: &[(u8, u8)]) -> Result<(), Error> {
 		match *self.inner {
 			NetBackendInner::Devp2p(ref net) => {
-				net.register_protocol(Arc::new(Devp2pHandlerWrapper(handler, Arc::downgrade(&self.inner))), protocol, packet_count, versions)
+				net.register_protocol(Arc::new(Devp2pHandlerWrapper(handler, Arc::downgrade(&self.inner))), protocol, versions)
 			},
 			NetBackendInner::Libp2p(ref net) => {
-				net.register_protocol(Arc::new(Libp2pHandlerWrapper(handler, Arc::downgrade(&self.inner))), protocol, packet_count, versions)
+				net.register_protocol(Arc::new(Libp2pHandlerWrapper(handler, Arc::downgrade(&self.inner))), protocol, versions)
 			},
 			NetBackendInner::Both(ref devp2p, ref libp2p) => {
 				// TODO: what to do in case of error? unregister?
-				devp2p.register_protocol(Arc::new(Devp2pHandlerWrapper(handler.clone(), Arc::downgrade(&self.inner))), protocol, packet_count, versions)?;
-				libp2p.register_protocol(Arc::new(Libp2pHandlerWrapper(handler, Arc::downgrade(&self.inner))), protocol, packet_count, versions)?;
+				devp2p.register_protocol(Arc::new(Devp2pHandlerWrapper(handler.clone(), Arc::downgrade(&self.inner))), protocol, versions)?;
+				libp2p.register_protocol(Arc::new(Libp2pHandlerWrapper(handler.clone(), Arc::downgrade(&self.inner))), protocol, versions)?;
 
 				let io = MergedNetworkContext {
 					devp2p: self.inner.devp2p(),
 					libp2p: self.inner.libp2p(),
+					protocol: protocol,
 					context: MergedNetworkContextInner::None,
 				};
 				handler.initialize(&io, &DummyHostInfo);
@@ -347,6 +348,7 @@ impl HostInfo for DummyHostInfo {
 pub struct MergedNetworkContext<'a> {
 	devp2p: Option<&'a Devp2pNetworkService>,
 	libp2p: Option<&'a Libp2pNetworkService>,
+	protocol: ProtocolId,
 	context: MergedNetworkContextInner<'a>,
 }
 
@@ -474,8 +476,12 @@ impl<'a> NetworkContext for MergedNetworkContext<'a> {
 			MergedNetworkContextInner::Devp2p(ref net) => net.register_timer(token, duration),
 			MergedNetworkContextInner::Libp2p(ref net) => net.register_timer(token, duration),
 			MergedNetworkContextInner::None => {
-				if let Some(ref devp2p) = self.devp2p {
-					devp2p.register_timer
+				if let Some(ref libp2p) = self.libp2p {
+					libp2p.with_context_eval(self.protocol, |ctxt| ctxt.register_timer(token, duration)).unwrap()
+				} else if let Some(ref devp2p) = self.devp2p {
+					devp2p.with_context_eval(self.protocol, |ctxt| ctxt.register_timer(token, duration)).unwrap()
+				} else {
+					panic!()
 				}
 			}
 		}
@@ -562,11 +568,9 @@ impl<'a> NetworkContext for MergedNetworkContext<'a> {
 		}
 	}
 
+	#[inline]
 	fn subprotocol_name(&self) -> ProtocolId {
-		match self.context {
-			MergedNetworkContextInner::Devp2p(ref net) => net.subprotocol_name(),
-			MergedNetworkContextInner::Libp2p(ref net) => net.subprotocol_name(),
-		}
+		self.protocol
 	}
 }
 
@@ -584,6 +588,7 @@ impl NetworkProtocolHandler for Devp2pHandlerWrapper {
 		let io = MergedNetworkContext {
 			devp2p: inner.devp2p(),
 			libp2p: inner.libp2p(),
+			protocol: io.subprotocol_name(),
 			context: MergedNetworkContextInner::Devp2p(io),
 		};
 		self.0.read(&io, &peer_id_int_to_ext(InternalPeerId::Devp2p(*peer)), packet_id, data);
@@ -594,6 +599,7 @@ impl NetworkProtocolHandler for Devp2pHandlerWrapper {
 		let io = MergedNetworkContext {
 			devp2p: inner.devp2p(),
 			libp2p: inner.libp2p(),
+			protocol: io.subprotocol_name(),
 			context: MergedNetworkContextInner::Devp2p(io),
 		};
 		self.0.connected(&io, &peer_id_int_to_ext(InternalPeerId::Devp2p(*peer)));
@@ -604,6 +610,7 @@ impl NetworkProtocolHandler for Devp2pHandlerWrapper {
 		let io = MergedNetworkContext {
 			devp2p: inner.devp2p(),
 			libp2p: inner.libp2p(),
+			protocol: io.subprotocol_name(),
 			context: MergedNetworkContextInner::Devp2p(io),
 		};
 		self.0.disconnected(&io, &peer_id_int_to_ext(InternalPeerId::Devp2p(*peer)));
@@ -614,6 +621,7 @@ impl NetworkProtocolHandler for Devp2pHandlerWrapper {
 		let io = MergedNetworkContext {
 			devp2p: inner.devp2p(),
 			libp2p: inner.libp2p(),
+			protocol: io.subprotocol_name(),
 			context: MergedNetworkContextInner::Devp2p(io),
 		};
 		self.0.timeout(&io, timer);
@@ -634,6 +642,7 @@ impl NetworkProtocolHandler for Libp2pHandlerWrapper {
 		let io = MergedNetworkContext {
 			devp2p: inner.devp2p(),
 			libp2p: inner.libp2p(),
+			protocol: io.subprotocol_name(),
 			context: MergedNetworkContextInner::Libp2p(io),
 		};
 		self.0.read(&io, &peer_id_int_to_ext(InternalPeerId::Libp2p(*peer)), packet_id, data);
@@ -644,6 +653,7 @@ impl NetworkProtocolHandler for Libp2pHandlerWrapper {
 		let io = MergedNetworkContext {
 			devp2p: inner.devp2p(),
 			libp2p: inner.libp2p(),
+			protocol: io.subprotocol_name(),
 			context: MergedNetworkContextInner::Libp2p(io),
 		};
 		self.0.connected(&io, &peer_id_int_to_ext(InternalPeerId::Libp2p(*peer)));
@@ -654,6 +664,7 @@ impl NetworkProtocolHandler for Libp2pHandlerWrapper {
 		let io = MergedNetworkContext {
 			devp2p: inner.devp2p(),
 			libp2p: inner.libp2p(),
+			protocol: io.subprotocol_name(),
 			context: MergedNetworkContextInner::Libp2p(io),
 		};
 		self.0.disconnected(&io, &peer_id_int_to_ext(InternalPeerId::Libp2p(*peer)));
@@ -664,6 +675,7 @@ impl NetworkProtocolHandler for Libp2pHandlerWrapper {
 		let io = MergedNetworkContext {
 			devp2p: inner.devp2p(),
 			libp2p: inner.libp2p(),
+			protocol: io.subprotocol_name(),
 			context: MergedNetworkContextInner::Libp2p(io),
 		};
 		self.0.timeout(&io, timer);

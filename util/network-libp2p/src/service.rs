@@ -84,11 +84,10 @@ struct RegisteredProtocol {
 	// Base name of the protocol as advertised on the network.
 	// Ends with `/` so that we can append a version number behind.
 	base_name: Bytes,
-	// List of protocol versions that we support. Ordered in descending order so that the best
-	// comes first.
-	supported_versions: Vec<u8>,
-	// Number of different packet IDs. Used to filter invalid messages.
-	packet_count: u8,
+	// List of protocol versions that we support, plus their packet count. Ordered in descending
+	// order so that the best comes first.
+	// The packet count is used to filter invalid messages.
+	supported_versions: Vec<(u8, u8)>,
 	handler: Arc<NetworkProtocolHandler + Send + Sync>,
 }
 
@@ -304,7 +303,7 @@ impl NetworkService {
 	}
 
 	/// Register a new protocol handler with the event loop.
-	pub fn register_protocol(&self, handler: Arc<NetworkProtocolHandler + Send + Sync>, protocol: ProtocolId, packet_count: u8, versions: &[u8]) -> Result<(), Error> {
+	pub fn register_protocol(&self, handler: Arc<NetworkProtocolHandler + Send + Sync>, protocol: ProtocolId, versions: &[(u8, u8)]) -> Result<(), Error> {
 		let mut proto_name = Bytes::from_static(b"/parity/");
 		proto_name.extend_from_slice(&protocol);
 		proto_name.extend_from_slice(b"/");
@@ -320,11 +319,10 @@ impl NetworkService {
 			id: protocol,
 			supported_versions: {
 				let mut tmp: Vec<_> = versions.iter().rev().cloned().collect();
-				tmp.sort_unstable_by(|a, b| b.cmp(a));
+				tmp.sort_unstable_by(|a, b| b.1.cmp(&a.1));
 				tmp
 			},
 			handler: handler.clone(),
-			packet_count,
 		});
 
 		handler.initialize(&NetworkContextImpl {
@@ -434,8 +432,9 @@ impl NetworkContext for NetworkContextImpl {
 	fn send_protocol(&self, protocol: ProtocolId, peer: PeerId, packet_id: PacketId, data: Vec<u8>) -> Result<(), Error> {
 		debug_assert!(self.inner.protocols.read().iter().find(|p| p.id == protocol).is_some(),
 					  "invalid protocol id requested in the API of the libp2p networking");
-		debug_assert!(packet_id < self.inner.protocols.read().iter().find(|p| p.id == protocol).unwrap().packet_count,
-					  "invalid packet id requested in the API of the libp2p networking");
+		// TODO: restore
+		//debug_assert!(packet_id < self.inner.protocols.read().iter().find(|p| p.id == protocol).unwrap().packet_count,
+		//			  "invalid packet id requested in the API of the libp2p networking");
 
 		if let Some(peer) = self.inner.sender_by_peer.read().get(peer) {
 			if let Some(sender) = peer.iter().find(|elem| elem.0 == protocol).map(|e| &e.1) {
@@ -626,7 +625,7 @@ impl<C> ConnectionUpgrade<C> for CustomProtoConnectionUpgrade
 	fn protocol_names(&self) -> Self::NamesIter {
 		if let Some(proto) = self.0.protocols.read().get(self.1) {
 			// Report each version as an individual protocol.
-			proto.supported_versions.iter().map(|&ver| {
+			proto.supported_versions.iter().map(|&(ver, _)| {
 				let mut num = ver.to_string();
 				let mut name = proto.base_name.clone();
 				name.extend_from_slice(num.as_bytes());
@@ -725,10 +724,12 @@ impl<C> ConnectionUpgrade<C> for CustomProtoConnectionUpgrade
 							}
 
 							let packet_id = data[0];
-							if packet_id >= registered_protocol.packet_count {
+							// TODO: restore
+							/*if packet_id >= registered_protocol.packet_count {
 								debug!(target: "eth-libp2p", "ignoring incoming packet because \
 										packet_id {} is too large", packet_id);
-							}
+								// TODO: return here
+							}*/
 
 							registered_protocol.handler.read(&NetworkContextImpl {
 								inner: shared,
