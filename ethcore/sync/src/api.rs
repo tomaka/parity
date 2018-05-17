@@ -20,12 +20,15 @@ use std::io;
 use std::ops::Range;
 use std::time::Duration;
 use bytes::Bytes;
-use devp2p::NetworkService;
 use network::{NetworkProtocolHandler, NetworkContext, PeerId, ProtocolId,
 	NetworkConfiguration as BasicNetworkConfiguration, NonReservedPeerMode, Error, ErrorKind,
 	ConnectionFilter};
+<<<<<<< HEAD
 
 use types::pruning_info::PruningInfo;
+=======
+use network_combined::NetworkService;
+>>>>>>> Add libp2p
 use ethereum_types::{H256, H512, U256};
 use io::{TimerToken};
 use ethcore::ethstore::ethkey::Secret;
@@ -316,7 +319,8 @@ impl EthSync {
 		};
 
 		let chain_sync = ChainSync::new(params.config, &*params.chain, params.private_tx_handler.clone());
-		let service = NetworkService::new(params.network_config.clone().into_basic()?, connection_filter)?;
+		// TODO: no unwrap
+		let service = NetworkService::new(params.network_config.into_basic().unwrap(), connection_filter)?;
 
 		let sync = Arc::new(EthSync {
 			network: service,
@@ -369,7 +373,8 @@ impl SyncProvider for EthSync {
 	}
 
 	fn enode(&self) -> Option<String> {
-		self.network.external_url()
+		// TODO:
+		self.network.external_url_devp2p()
 	}
 
 	fn transactions_stats(&self) -> BTreeMap<H256, TransactionStats> {
@@ -580,11 +585,13 @@ impl ManageNetwork for EthSync {
 	}
 
 	fn remove_reserved_peer(&self, peer: String) -> Result<(), String> {
-		self.network.remove_reserved_peer(&peer).map_err(|e| format!("{:?}", e))
+		// TODO: libp2p
+		self.network.remove_reserved_peer_devp2p(&peer).map_err(|e| format!("{:?}", e))
 	}
 
 	fn add_reserved_peer(&self, peer: String) -> Result<(), String> {
-		self.network.add_reserved_peer(&peer).map_err(|e| format!("{:?}", e))
+		// TODO: libp2p
+		self.network.add_reserved_peer_devp2p(&peer).map_err(|e| format!("{:?}", e))
 	}
 
 	fn start_network(&self) {
@@ -616,6 +623,10 @@ impl ManageNetwork for EthSync {
 #[derive(Debug, Clone, PartialEq, Eq)]
 /// Network service configuration
 pub struct NetworkConfiguration {
+	/// True if devp2p is enabled
+	pub enabled_devp2p: bool,
+	/// True if libp2p is enabled
+	pub enabled_libp2p: bool,
 	/// Directory path to store general network configuration. None means nothing will be saved
 	pub config_path: Option<String>,
 	/// Directory path to store network-specific configuration. None means nothing will be saved
@@ -630,8 +641,10 @@ pub struct NetworkConfiguration {
 	pub nat_enabled: bool,
 	/// Enable discovery
 	pub discovery_enabled: bool,
-	/// List of initial node addresses
-	pub boot_nodes: Vec<String>,
+	/// List of initial node addresses for devp2p
+	pub boot_nodes_devp2p: Vec<String>,
+	/// List of initial node addresses for libp2p
+	pub boot_nodes_libp2p: Vec<String>,
 	/// Use provided node key instead of default
 	pub use_secret: Option<Secret>,
 	/// Max number of connected peers to maintain
@@ -666,6 +679,8 @@ impl NetworkConfiguration {
 	/// Attempt to convert this config into a BasicNetworkConfiguration.
 	pub fn into_basic(self) -> Result<BasicNetworkConfiguration, AddrParseError> {
 		Ok(BasicNetworkConfiguration {
+			enabled_devp2p: self.enabled_devp2p,
+			enabled_libp2p: self.enabled_libp2p,
 			config_path: self.config_path,
 			net_config_path: self.net_config_path,
 			listen_address: match self.listen_address { None => None, Some(addr) => Some(SocketAddr::from_str(&addr)?) },
@@ -673,7 +688,8 @@ impl NetworkConfiguration {
 			udp_port: self.udp_port,
 			nat_enabled: self.nat_enabled,
 			discovery_enabled: self.discovery_enabled,
-			boot_nodes: self.boot_nodes,
+			boot_nodes_devp2p: self.boot_nodes_devp2p,
+			boot_nodes_libp2p: self.boot_nodes_libp2p,
 			use_secret: self.use_secret,
 			max_peers: self.max_peers,
 			min_peers: self.min_peers,
@@ -690,6 +706,8 @@ impl NetworkConfiguration {
 impl From<BasicNetworkConfiguration> for NetworkConfiguration {
 	fn from(other: BasicNetworkConfiguration) -> Self {
 		NetworkConfiguration {
+			enabled_devp2p: other.enabled_devp2p,
+			enabled_libp2p: other.enabled_libp2p,
 			config_path: other.config_path,
 			net_config_path: other.net_config_path,
 			listen_address: other.listen_address.and_then(|addr| Some(format!("{}", addr))),
@@ -697,7 +715,8 @@ impl From<BasicNetworkConfiguration> for NetworkConfiguration {
 			udp_port: other.udp_port,
 			nat_enabled: other.nat_enabled,
 			discovery_enabled: other.discovery_enabled,
-			boot_nodes: other.boot_nodes,
+			boot_nodes_devp2p: other.boot_nodes_devp2p,
+			boot_nodes_libp2p: other.boot_nodes_libp2p,
 			use_secret: other.use_secret,
 			max_peers: other.max_peers,
 			min_peers: other.min_peers,
@@ -850,11 +869,11 @@ impl ManageNetwork for LightSync {
 	}
 
 	fn remove_reserved_peer(&self, peer: String) -> Result<(), String> {
-		self.network.remove_reserved_peer(&peer).map_err(|e| format!("{:?}", e))
+		self.network.remove_reserved_peer_devp2p(&peer).map_err(|e| format!("{:?}", e))
 	}
 
 	fn add_reserved_peer(&self, peer: String) -> Result<(), String> {
-		self.network.add_reserved_peer(&peer).map_err(|e| format!("{:?}", e))
+		self.network.add_reserved_peer_devp2p(&peer).map_err(|e| format!("{:?}", e))
 	}
 
 	fn start_network(&self) {
@@ -929,7 +948,8 @@ impl LightSyncProvider for LightSync {
 	}
 
 	fn enode(&self) -> Option<String> {
-		self.network.external_url()
+		// TODO:
+		self.network.external_url_devp2p()
 	}
 
 	fn network_id(&self) -> u64 {

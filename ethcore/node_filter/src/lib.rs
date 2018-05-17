@@ -45,7 +45,7 @@ use parking_lot::Mutex;
 use ethcore::client::{BlockChainClient, BlockId};
 use ethereum_types::{H256, Address};
 use ethabi::FunctionOutputDecoder;
-use network::{ConnectionFilter, ConnectionDirection};
+use network::{ConnectionFilter, ConnectionDirection, ConnectionRefuseReason};
 use devp2p::NodeId;
 
 use_contract!(peer_set, "res/peer_set.json");
@@ -56,7 +56,7 @@ const MAX_CACHE_SIZE: usize = 4096;
 pub struct NodeFilter {
 	client: Weak<BlockChainClient>,
 	contract_address: Address,
-	permission_cache: Mutex<LruCache<(H256, NodeId), bool>>,
+	permission_cache: Mutex<LruCache<(H256, NodeId), Result<(), ConnectionRefuseReason>>>,
 }
 
 impl NodeFilter {
@@ -71,15 +71,17 @@ impl NodeFilter {
 }
 
 impl ConnectionFilter for NodeFilter {
-	fn connection_allowed(&self, own_id: &NodeId, connecting_id: &NodeId, _direction: ConnectionDirection) -> bool {
+	fn connection_allowed(&self, own_id: &NodeId, connecting_id: &NodeId,
+		_direction: ConnectionDirection) -> Result<(), ConnectionRefuseReason>
+	{
 		let client = match self.client.upgrade() {
 			Some(client) => client,
-			None => return false,
+			None => return Err(ConnectionRefuseReason::Unauthorized),
 		};
 
 		let block_hash = match client.block_hash(BlockId::Latest) {
 			Some(block_hash) => block_hash,
-			None => return false,
+			None => return Err(ConnectionRefuseReason::Unauthorized),
 		};
 
 		let key = (block_hash, *connecting_id);
@@ -100,7 +102,7 @@ impl ConnectionFilter for NodeFilter {
 			.and_then(|value| decoder.decode(&value).map_err(|e| e.to_string()))
 			.unwrap_or_else(|e| {
 				debug!("Error callling peer set contract: {:?}", e);
-				false
+				Err(ConnectionRefuseReason::Unauthorized)
 			});
 
 		cache.insert(key, allowed);

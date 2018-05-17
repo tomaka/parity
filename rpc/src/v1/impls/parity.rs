@@ -44,8 +44,13 @@ use v1::types::{
 	Peers, Transaction, RpcSettings, Histogram,
 	TransactionStats, LocalTransactionStatus,
 	BlockNumber, ConsensusCapability, VersionInfo,
+<<<<<<< HEAD
 	OperationsInfo, ChainStatus,
 	AccountInfo, HwAccountInfo, RichHeader, Receipt,
+=======
+	OperationsInfo, DappId, ChainStatus,
+	AccountInfo, HwAccountInfo, RichHeader, NetSettings,
+>>>>>>> Add libp2p
 	block_number_to_id
 };
 use Host;
@@ -196,7 +201,17 @@ impl<C, M, U, S> Parity for ParityClient<C, M, U> where
 	}
 
 	fn net_port(&self) -> Result<u16> {
-		Ok(self.settings.network_port)
+		match self.settings.devp2p_port {
+			Some(port) => Ok(port),
+			None => Err(errors::network_disabled()),
+		}
+	}
+
+	fn net_settings(&self) -> Result<NetSettings> {
+		Ok(NetSettings {
+			devp2p_port: self.settings.devp2p_port,
+			libp2p_port: self.settings.libp2p_port,
+		})
 	}
 
 	fn node_name(&self) -> Result<String> {

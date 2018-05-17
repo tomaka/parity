@@ -34,7 +34,7 @@ extern crate error_chain;
 mod connection_filter;
 mod error;
 
-pub use connection_filter::{ConnectionFilter, ConnectionDirection};
+pub use connection_filter::{ConnectionFilter, ConnectionDirection, ConnectionRefuseReason};
 pub use io::TimerToken;
 pub use error::{Error, ErrorKind, DisconnectReason};
 
@@ -169,6 +169,10 @@ impl Ord for SessionCapabilityInfo {
 /// Network service configuration
 #[derive(Debug, PartialEq, Clone)]
 pub struct NetworkConfiguration {
+	/// True if the devp2p backend is enabled
+	pub enabled_devp2p: bool,
+	/// True if the libp2p backend is enabled
+	pub enabled_libp2p: bool,
 	/// Directory path to store general network configuration. None means nothing will be saved
 	pub config_path: Option<String>,
 	/// Directory path to store network-specific configuration. None means nothing will be saved
@@ -183,8 +187,10 @@ pub struct NetworkConfiguration {
 	pub nat_enabled: bool,
 	/// Enable discovery
 	pub discovery_enabled: bool,
-	/// List of initial node addresses
-	pub boot_nodes: Vec<String>,
+	/// List of initial node addresses for devp2p
+	pub boot_nodes_devp2p: Vec<String>,
+	/// List of initial node addresses for libp2p
+	pub boot_nodes_libp2p: Vec<String>,
 	/// Use provided node key instead of default
 	pub use_secret: Option<Secret>,
 	/// Minimum number of connected peers to maintain
@@ -215,6 +221,8 @@ impl NetworkConfiguration {
 	/// Create a new instance of default settings.
 	pub fn new() -> Self {
 		NetworkConfiguration {
+			enabled_devp2p: true,
+			enabled_libp2p: true,
 			config_path: None,
 			net_config_path: None,
 			listen_address: None,
@@ -222,7 +230,8 @@ impl NetworkConfiguration {
 			udp_port: None,
 			nat_enabled: true,
 			discovery_enabled: true,
-			boot_nodes: Vec::new(),
+			boot_nodes_devp2p: Vec::new(),
+			boot_nodes_libp2p: Vec::new(),
 			use_secret: None,
 			min_peers: 25,
 			max_peers: 50,

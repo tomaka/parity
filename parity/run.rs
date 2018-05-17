@@ -123,7 +123,8 @@ pub struct RunCmd {
 	pub private_encryptor_conf: EncryptorConfig,
 	pub private_tx_enabled: bool,
 	pub name: String,
-	pub custom_bootnodes: bool,
+	pub custom_bootnodes_devp2p: bool,
+	pub custom_bootnodes_libp2p: bool,
 	pub stratum: Option<stratum::Options>,
 	pub snapshot_conf: SnapshotConfiguration,
 	pub check_seal: bool,
@@ -134,8 +135,13 @@ pub struct RunCmd {
 	pub no_persistent_txqueue: bool,
 	pub whisper: ::whisper::Config,
 	pub no_hardcoded_sync: bool,
+<<<<<<< HEAD
 	pub on_demand_retry_count: Option<usize>,
 	pub on_demand_inactive_time_limit: Option<u64>,
+=======
+	pub with_devp2p: bool,
+	pub with_libp2p: bool,
+>>>>>>> Add libp2p
 }
 
 // node info fetcher for the local store.
@@ -242,8 +248,11 @@ fn execute_light_impl(cmd: RunCmd, logger: Arc<RotatingLogger>) -> Result<Runnin
 	// start network.
 	// set up bootnodes
 	let mut net_conf = cmd.net_conf;
-	if !cmd.custom_bootnodes {
-		net_conf.boot_nodes = spec.nodes.clone();
+	if !cmd.custom_bootnodes_devp2p {
+		net_conf.boot_nodes_devp2p = spec.nodes_devp2p.clone();
+	}
+	if !cmd.custom_bootnodes_libp2p {
+		net_conf.boot_nodes_libp2p = spec.nodes_libp2p.clone();
 	}
 
 	let mut attached_protos = Vec::new();
@@ -257,8 +266,10 @@ fn execute_light_impl(cmd: RunCmd, logger: Arc<RotatingLogger>) -> Result<Runnin
 
 	// set network path.
 	net_conf.net_config_path = Some(db_dirs.network_path().to_string_lossy().into_owned());
+	net_conf.enabled_devp2p = cmd.with_devp2p;
+	net_conf.enabled_libp2p = cmd.with_libp2p;
 	let sync_params = LightSyncParams {
-		network_config: net_conf.into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?,
+		network_config: net_conf.clone().into_basic().map_err(|e| format!("Failed to produce network config: {}", e))?,
 		client: Arc::new(provider),
 		network_id: cmd.network_id.unwrap_or(spec.network_id()),
 		subprotocol_name: sync::LIGHT_PROTOCOL,
@@ -549,8 +560,11 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 
 	// set up bootnodes
 	let mut net_conf = cmd.net_conf;
-	if !cmd.custom_bootnodes {
-		net_conf.boot_nodes = spec.nodes.clone();
+	if !cmd.custom_bootnodes_devp2p {
+		net_conf.boot_nodes_devp2p = spec.nodes_devp2p.clone();
+	}
+	if !cmd.custom_bootnodes_libp2p {
+		net_conf.boot_nodes_libp2p = spec.nodes_libp2p.clone();
 	}
 
 	// set network path.
@@ -650,7 +664,7 @@ fn execute_impl<Cr, Rr>(cmd: RunCmd, logger: Arc<RotatingLogger>, on_client_rq: 
 	// create sync object
 	let (sync_provider, manage_network, chain_notify) = modules::sync(
 		sync_config,
-		net_conf.clone().into(),
+		net_conf.clone(),
 		client.clone(),
 		snapshot_service.clone(),
 		private_tx_service.clone(),

@@ -23,8 +23,10 @@ pub struct NetworkSettings {
 	pub name: String,
 	/// Name of the chain we are connected to
 	pub chain: String,
-	/// Networking port
-	pub network_port: u16,
+	/// The port devp2p is listening on, or `None` if it is disabled.
+	pub devp2p_port: Option<u16>,
+	/// The port libp2p is listening on, or `None` if it is disabled.
+	pub libp2p_port: Option<u16>,
 	/// Is JSON-RPC server enabled?
 	pub rpc_enabled: bool,
 	/// Interface that JSON-RPC listens on
@@ -38,7 +40,8 @@ impl Default for NetworkSettings {
 		NetworkSettings {
 			name: "".into(),
 			chain: "foundation".into(),
-			network_port: 30303,
+			devp2p_port: Some(30303),
+			libp2p_port: None,
 			rpc_enabled: true,
 			rpc_interface: "127.0.0.1".into(),
 			rpc_port: 8545

@@ -11,7 +11,7 @@ authors = ["Parity Technologies <admin@parity.io>"]
 common-types = { path = "../types" }
 parity-bytes = "0.1"
 ethcore-network = { path = "../../util/network" }
-ethcore-network-devp2p = { path = "../../util/network-devp2p" }
+ethcore-network-combined = { path = "../../util/network-combined" }
 ethcore-io = { path = "../../util/io" }
 ethcore-light = { path = "../light" }
 ethcore-transaction = { path = "../transaction" }

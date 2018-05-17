@@ -23,7 +23,7 @@
 
 extern crate common_types as types;
 extern crate ethcore_network as network;
-extern crate ethcore_network_devp2p as devp2p;
+extern crate ethcore_network_combined as network_combined;
 extern crate parity_bytes as bytes;
 extern crate ethcore_io as io;
 extern crate ethcore_transaction as transaction;
@@ -70,6 +70,6 @@ mod api;
 
 pub use api::*;
 pub use chain::{SyncStatus, SyncState};
-pub use devp2p::validate_node_url;
+pub use network_combined::{validate_devp2p_node_url, validate_libp2p_node_url};
 pub use network::{NonReservedPeerMode, Error, ErrorKind, ConnectionFilter, ConnectionDirection};
 pub use private_tx::{PrivateTxHandler, NoopPrivateTxHandler, SimplePrivateTxHandler};

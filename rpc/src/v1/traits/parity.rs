@@ -26,8 +26,13 @@ use v1::types::{
 	Peers, Transaction, RpcSettings, Histogram,
 	TransactionStats, LocalTransactionStatus,
 	BlockNumber, ConsensusCapability, VersionInfo,
+<<<<<<< HEAD
 	OperationsInfo, ChainStatus,
 	AccountInfo, HwAccountInfo, RichHeader, Receipt,
+=======
+	OperationsInfo, DappId, ChainStatus, NetSettings,
+	AccountInfo, HwAccountInfo, RichHeader,
+>>>>>>> Add libp2p
 };
 
 build_rpc_trait! {
@@ -90,6 +95,10 @@ build_rpc_trait! {
 		/// Returns network port
 		#[rpc(name = "parity_netPort")]
 		fn net_port(&self) -> Result<u16>;
+
+		/// Returns the network settings of devp2p and libp2p.
+		#[rpc(name = "parity_netSettings")]
+		fn net_settings(&self) -> Result<NetSettings>;
 
 		/// Returns rpc settings
 		#[rpc(name = "parity_rpcSettings")]

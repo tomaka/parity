@@ -27,8 +27,8 @@ use cache::CacheConfig;
 use dir::DatabaseDirectories;
 use dir::helpers::replace_home;
 use upgrade::{upgrade, upgrade_data_paths};
-use sync::{validate_node_url, self};
 use db::migrate;
+use sync::{self, validate_devp2p_node_url, validate_libp2p_node_url};
 use path;
 use ethkey::Password;
 
@@ -163,11 +163,11 @@ pub fn parity_ipc_path(base: &str, path: &str, shift: u16) -> String {
 	replace_home(base, &path)
 }
 
-/// Validates and formats bootnodes option.
-pub fn to_bootnodes(bootnodes: &Option<String>) -> Result<Vec<String>, String> {
+/// Validates and formats bootnodes option for devp2p.
+pub fn to_bootnodes_devp2p(bootnodes: &Option<String>) -> Result<Vec<String>, String> {
 	match *bootnodes {
 		Some(ref x) if !x.is_empty() => x.split(',').map(|s| {
-			match validate_node_url(s).map(Into::into) {
+			match validate_devp2p_node_url(s).map(Into::into) {
 				None => Ok(s.to_owned()),
 				Some(sync::ErrorKind::AddressResolve(_)) => Err(format!("Failed to resolve hostname of a boot node: {}", s)),
 				Some(_) => Err(format!("Invalid node address format given for a boot node: {}", s)),
@@ -178,8 +178,24 @@ pub fn to_bootnodes(bootnodes: &Option<String>) -> Result<Vec<String>, String> {
 	}
 }
 
+/// Validates and formats bootnodes option for libp2p.
+pub fn to_bootnodes_libp2p(bootnodes: &Option<String>) -> Result<Vec<String>, String> {
+	// TODO: do better!
+	match *bootnodes {
+		Some(ref x) if !x.is_empty() => x.split(',').map(|s| {
+			match validate_libp2p_node_url(s).map_err(Into::into) {
+				Ok(()) => Ok(s.to_owned()),
+				Err(sync::ErrorKind::AddressResolve(_)) => Err(format!("Failed to resolve hostname of a boot node: {}", s)),
+				Err(_) => Err(format!("Invalid node address format given for a boot node: {}", s)),
+			}
+		}).collect(),
+		Some(_) => Ok(vec![]),
+		None => Ok(vec![])
+	}
+}
+
 #[cfg(test)]
-pub fn default_network_config() -> ::sync::NetworkConfiguration {
+pub fn default_network_config_devp2p() -> ::sync::NetworkConfiguration {
 	use sync::{NetworkConfiguration};
 	use super::network::IpFilter;
 	NetworkConfiguration {
@@ -200,6 +216,14 @@ pub fn default_network_config() -> ::sync::NetworkConfiguration {
 		reserved_nodes: Vec::new(),
 		allow_non_reserved: true,
 		client_version: ::parity_version::version(),
+	}
+}
+
+#[cfg(test)]
+pub fn default_network_config_libp2p() -> ::sync::NetworkConfiguration {
+	::sync::NetworkConfiguration {
+		listen_address: Some("0.0.0.0:10303".into()),
+		.. default_network_config_devp2p()
 	}
 }
 
@@ -330,7 +354,7 @@ mod tests {
 	use ethcore::client::{Mode, BlockId};
 	use ethcore::miner::PendingSet;
 	use ethkey::Password;
-	use super::{to_duration, to_mode, to_block_id, to_u256, to_pending_set, to_address, to_addresses, to_price, geth_ipc_path, to_bootnodes, password_from_file};
+	use super::{to_duration, to_mode, to_block_id, to_u256, to_pending_set, to_address, to_addresses, to_price, geth_ipc_path, to_bootnodes_devp2p, to_bootnodes_libp2p, password_from_file};
 
 	#[test]
 	fn test_to_duration() {
@@ -461,13 +485,24 @@ but the first password is trimmed
 	}
 
 	#[test]
-	fn test_to_bootnodes() {
+	fn test_to_bootnodes_devp2p() {
 		let one_bootnode = "enode://e731347db0521f3476e6bbbb83375dcd7133a1601425ebd15fd10f3835fd4c304fba6282087ca5a0deeafadf0aa0d4fd56c3323331901c1f38bd181c283e3e35@128.199.55.137:30303";
 		let two_bootnodes = "enode://e731347db0521f3476e6bbbb83375dcd7133a1601425ebd15fd10f3835fd4c304fba6282087ca5a0deeafadf0aa0d4fd56c3323331901c1f38bd181c283e3e35@128.199.55.137:30303,enode://e731347db0521f3476e6bbbb83375dcd7133a1601425ebd15fd10f3835fd4c304fba6282087ca5a0deeafadf0aa0d4fd56c3323331901c1f38bd181c283e3e35@128.199.55.137:30303";
 
-		assert_eq!(to_bootnodes(&Some("".into())), Ok(vec![]));
-		assert_eq!(to_bootnodes(&None), Ok(vec![]));
-		assert_eq!(to_bootnodes(&Some(one_bootnode.into())), Ok(vec![one_bootnode.into()]));
-		assert_eq!(to_bootnodes(&Some(two_bootnodes.into())), Ok(vec![one_bootnode.into(), one_bootnode.into()]));
+		assert_eq!(to_bootnodes_devp2p(&Some("".into())), Ok(vec![]));
+		assert_eq!(to_bootnodes_devp2p(&None), Ok(vec![]));
+		assert_eq!(to_bootnodes_devp2p(&Some(one_bootnode.into())), Ok(vec![one_bootnode.into()]));
+		assert_eq!(to_bootnodes_devp2p(&Some(two_bootnodes.into())), Ok(vec![one_bootnode.into(), one_bootnode.into()]));
+	}
+
+	#[test]
+	fn test_to_bootnodes_libp2p() {
+		let one_bootnode = "/ip4/1.2.3.4/tcp/50/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ";
+		let two_bootnodes = "/ip4/1.2.3.4/tcp/50/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ,/ip4/1.2.3.4/tcp/50/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ";
+
+		assert_eq!(to_bootnodes_libp2p(&Some("".into())), Ok(vec![]));
+		assert_eq!(to_bootnodes_libp2p(&None), Ok(vec![]));
+		assert_eq!(to_bootnodes_libp2p(&Some(one_bootnode.into())), Ok(vec![one_bootnode.into()]));
+		assert_eq!(to_bootnodes_libp2p(&Some(two_bootnodes.into())), Ok(vec![one_bootnode.into(), one_bootnode.into()]));
 	}
 }

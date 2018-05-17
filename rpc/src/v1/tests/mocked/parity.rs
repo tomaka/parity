@@ -321,6 +321,17 @@ fn rpc_parity_net_port() {
 }
 
 #[test]
+fn rpc_parity_net_settings() {
+	let deps = Dependencies::new();
+	let io = deps.default_client();
+
+	let request = r#"{"jsonrpc": "2.0", "method": "parity_netSettings", "params":[], "id": 1}"#;
+	let response = r#"{"jsonrpc":"2.0","result":{"devp2p_port":30303},"id":1}"#;
+
+	assert_eq!(io.handle_request_sync(request), Some(response.to_owned()));
+}
+
+#[test]
 fn rpc_parity_rpc_settings() {
 	let deps = Dependencies::new();
 	let io = deps.default_client();

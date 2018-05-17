@@ -52,8 +52,12 @@ pub struct Spec {
 	pub genesis: Genesis,
 	/// Genesis state.
 	pub accounts: State,
-	/// Boot nodes.
-	pub nodes: Option<Vec<String>>,
+	/// Boot nodes for devp2p.
+	#[serde(rename="nodes")]
+	pub nodes_devp2p: Option<Vec<String>>,
+	/// Boot nodes for libp2p.
+	#[serde(rename="nodesLibp2p")]
+	pub nodes_libp2p: Option<Vec<String>>,
 	/// Hardcoded synchronization for the light client.
 	#[serde(rename="hardcodedSync")]
 	pub hardcoded_sync: Option<HardcodedSync>,
@@ -115,6 +119,9 @@ mod tests {
 	},
 	"nodes": [
 		"enode://b1217cbaa440e35ed471157123fe468e19e8b5ad5bedb4b1fdbcbdab6fb2f5ed3e95dd9c24a22a79fdb2352204cea207df27d92bfd21bfd41545e8b16f637499@104.44.138.37:30303"
+	],
+	"nodesLibp2p": [
+		"/ip4/1.2.3.4/tcp/10333/p2p/QmaCpDMGvV2BGHeYERUEnRQAwe3N8SzbUtfsmvsqQLuvuJ"
 	],
 	"accounts": {
 		"0000000000000000000000000000000000000001": { "balance": "1", "nonce": "1048576", "builtin": { "name": "ecrecover", "pricing": { "linear": { "base": 3000, "word": 0 } } } },

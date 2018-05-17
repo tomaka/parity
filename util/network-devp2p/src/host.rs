@@ -45,7 +45,7 @@ use discovery::{Discovery, TableUpdates, NodeEntry, MAX_DATAGRAM_SIZE};
 use ip_utils::{map_external_address, select_public_address};
 use parity_path::restrict_permissions_owner;
 use parking_lot::{Mutex, RwLock};
-use network::{ConnectionFilter, ConnectionDirection};
+use network::{ConnectionFilter, ConnectionDirection, ConnectionRefuseReason};
 
 type Slab<T> = ::slab::Slab<T, usize>;
 
@@ -292,7 +292,7 @@ impl Host {
 		let udp_port = config.udp_port.unwrap_or_else(|| listen_address.port());
 		let local_endpoint = NodeEndpoint { address: listen_address, udp_port };
 
-		let boot_nodes = config.boot_nodes.clone();
+		let boot_nodes = config.boot_nodes_devp2p.clone();
 		let reserved_nodes = config.reserved_nodes.clone();
 		config.max_handshakes = min(config.max_handshakes, MAX_HANDSHAKES as u32);
 
@@ -590,7 +590,7 @@ impl Host {
 				!self.have_session(id) &&
 				!self.connecting_to(id) &&
 				*id != self_id &&
-				self.filter.as_ref().map_or(true, |f| f.connection_allowed(&self_id, &id, ConnectionDirection::Outbound))
+				self.filter.as_ref().map_or(true, |f| f.connection_allowed(&self_id, &id, ConnectionDirection::Outbound).is_ok())
 			).take(min(max_handshakes_per_round, max_handshakes - handshake_count)) {
 			self.connect_peer(&id, io);
 			started += 1;
@@ -761,11 +761,21 @@ impl Host {
 								}
 							}
 
-							if !self.filter.as_ref().map_or(true, |f| f.connection_allowed(&self_id, &id, ConnectionDirection::Inbound)) {
-								trace!(target: "network", "Inbound connection not allowed for {:?}", id);
-								s.disconnect(io, DisconnectReason::UnexpectedIdentity);
-								kill = true;
-								break;
+							match self.filter.as_ref().map_or(Ok(()), |f| f.connection_allowed(&self_id, &id, ConnectionDirection::Inbound)) {
+								Ok(()) => (),
+								Err(err) => {
+									match err {
+										ConnectionRefuseReason::Unauthorized => {
+											trace!(target: "network", "Inbound connection not allowed for {:?}", id);
+											s.disconnect(io, DisconnectReason::UnexpectedIdentity);
+										},
+										ConnectionRefuseReason::MaximumPeersReached => {
+											s.disconnect(io, DisconnectReason::TooManyPeers);
+										},
+									};
+									kill = true;
+									break;
+								}
 							}
 
 							ready_id = Some(id);

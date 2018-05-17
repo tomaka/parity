@@ -41,9 +41,15 @@ use v1::types::{
 	Bytes, U256, U64, H64, H160, H256, H512, CallRequest,
 	Peers, Transaction, RpcSettings, Histogram,
 	TransactionStats, LocalTransactionStatus,
+<<<<<<< HEAD
 	BlockNumber, LightBlockNumber, ConsensusCapability, VersionInfo,
 	OperationsInfo, ChainStatus,
 	AccountInfo, HwAccountInfo, Header, RichHeader, Receipt,
+=======
+	BlockNumber, ConsensusCapability, VersionInfo,
+	OperationsInfo, DappId, ChainStatus, NetSettings,
+	AccountInfo, HwAccountInfo, Header, RichHeader,
+>>>>>>> Add libp2p
 };
 use Host;
 
@@ -187,7 +193,17 @@ impl Parity for ParityClient {
 	}
 
 	fn net_port(&self) -> Result<u16> {
-		Ok(self.settings.network_port)
+		match self.settings.devp2p_port {
+			Some(port) => Ok(port),
+			None => Err(errors::network_disabled()),
+		}
+	}
+
+	fn net_settings(&self) -> Result<NetSettings> {
+		Ok(NetSettings {
+			devp2p_port: self.settings.devp2p_port,
+			libp2p_port: self.settings.libp2p_port,
+		})
 	}
 
 	fn node_name(&self) -> Result<String> {

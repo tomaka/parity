@@ -42,17 +42,21 @@ path = "$HOME/.parity/signer"
 
 [network]
 port = 30303
+libp2p_port = 10333
 min_peers = 25
 max_peers = 50
 nat = "any"
 id = 1
 bootnodes = []
+libp2p_bootnodes = []
 discovery = true
 warp = true
 allow_ips = "all"
 snapshot_peers = 0
 max_pending_peers = 64
 no_serve_light = false
+no_devp2p = false
+with_libp2p = false
 
 reserved_only = false
 reserved_peers = "./path_to_file"
